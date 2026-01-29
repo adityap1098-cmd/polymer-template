@@ -357,7 +357,7 @@ async def analyze_top_holders(token_address: str):
             save = input(f"\n{Fore.GREEN}Save to file? [y/N] > {Style.RESET_ALL}").strip().lower()
             if save == 'y':
                 filename = f"holders_{token_address[:8]}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.txt"
-                with open(filename, 'w') as f:
+                with open(filename, 'w', encoding='utf-8') as f:
                     f.write(output)
                 print(f"{Fore.GREEN}✅ Saved to {filename}{Style.RESET_ALL}")
         except EOFError:
@@ -493,7 +493,7 @@ async def analyze_from_csv():
             if save == 'y':
                 timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
                 filename = f"analysis_imported_{timestamp}.txt"
-                with open(filename, 'w') as f:
+                with open(filename, 'w', encoding='utf-8') as f:
                     f.write(output)
                 print(f"{Fore.GREEN}✅ Saved to {filename}{Style.RESET_ALL}")
         except EOFError:
