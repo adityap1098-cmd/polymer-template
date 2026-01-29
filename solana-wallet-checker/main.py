@@ -75,8 +75,8 @@ def print_wallet_report(wallet_info):
 
     # Format balance
     balance = "Unknown"
-    if wallet_info.initial_balance is not None:
-        balance = f"{wallet_info.initial_balance:.4f} SOL"
+    if wallet_info.current_balance is not None:
+        balance = f"{wallet_info.current_balance:.4f} SOL"
 
     print(f"""
 {Fore.CYAN}[{timestamp}]{Style.RESET_ALL} {Fore.WHITE}NEW BUYER DETECTED{Style.RESET_ALL}
@@ -100,11 +100,11 @@ class WalletCheckerBot:
         load_dotenv()
 
         self.rpc_url = os.getenv(
-            "QUICKNODE_RPC_URL",
+            "SOLANA_RPC_URL",
             "https://api.mainnet-beta.solana.com"
         )
         self.wss_url = os.getenv(
-            "QUICKNODE_WSS_URL",
+            "SOLANA_WSS_URL",
             "wss://api.mainnet-beta.solana.com"
         )
         self.old_threshold = int(os.getenv("OLD_WALLET_THRESHOLD", "5"))
@@ -208,12 +208,8 @@ def validate_solana_address(address: str) -> bool:
     try:
         decoded = base58.b58decode(address)
         return len(decoded) == 32
-    except (ValueError, ImportError):
-        # If base58 not available, do basic validation
-        if len(address) < 32 or len(address) > 44:
-            return False
-        valid_chars = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz"
-        return all(c in valid_chars for c in address)
+    except (ValueError, TypeError):
+        return False
 
 
 async def main():

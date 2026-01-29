@@ -39,8 +39,8 @@ A Python bot for monitoring Solana token transactions in real-time and classifyi
 
 4. Edit `.env` with your RPC endpoints (optional - defaults to public Solana RPC):
    ```
-   QUICKNODE_RPC_URL=https://your-endpoint.solana-mainnet.quiknode.pro/your-api-key/
-   QUICKNODE_WSS_URL=wss://your-endpoint.solana-mainnet.quiknode.pro/your-api-key/
+   SOLANA_RPC_URL=https://your-endpoint.solana-mainnet.quiknode.pro/your-api-key/
+   SOLANA_WSS_URL=wss://your-endpoint.solana-mainnet.quiknode.pro/your-api-key/
    ```
 
 ## Usage
@@ -103,8 +103,8 @@ SOL Balance:  1.5000 SOL
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `QUICKNODE_RPC_URL` | `https://api.mainnet-beta.solana.com` | Solana RPC endpoint |
-| `QUICKNODE_WSS_URL` | `wss://api.mainnet-beta.solana.com` | Solana WebSocket endpoint |
+| `SOLANA_RPC_URL` | `https://api.mainnet-beta.solana.com` | Solana RPC endpoint |
+| `SOLANA_WSS_URL` | `wss://api.mainnet-beta.solana.com` | Solana WebSocket endpoint |
 | `OLD_WALLET_THRESHOLD` | `5` | Number of unique tokens for OLD classification |
 | `POLL_INTERVAL` | `5` | Polling interval in seconds (polling mode only) |
 

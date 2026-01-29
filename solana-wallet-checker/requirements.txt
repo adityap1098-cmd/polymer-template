@@ -4,3 +4,4 @@ websockets>=12.0
 aiohttp>=3.13.3
 python-dotenv>=1.0.0
 colorama>=0.4.6
+base58>=2.1.1

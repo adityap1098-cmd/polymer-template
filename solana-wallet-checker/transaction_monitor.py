@@ -75,24 +75,14 @@ class TransactionMonitor:
             "params": params
         }
 
-        async with session.post(self.rpc_url, json=payload) as response:
-            data = await response.json()
-            if "error" in data:
-                raise RuntimeError(f"RPC Error: {data['error']}")
-            return data.get("result", {})
-
-    async def _get_token_holders(self) -> list:
-        """
-        Get largest token holders for the monitored token.
-
-        Returns:
-            List of token holder accounts
-        """
-        result = await self._rpc_call(
-            "getTokenLargestAccounts",
-            [self.token_address]
-        )
-        return result.get("value", [])
+        try:
+            async with session.post(self.rpc_url, json=payload) as response:
+                data = await response.json()
+                if "error" in data:
+                    raise RuntimeError(f"RPC Error: {data['error']}")
+                return data.get("result", {})
+        except aiohttp.ClientError as e:
+            raise RuntimeError(f"Network error: {e}") from e
 
     async def _get_signatures_for_token(self, limit: int = 20) -> list:
         """

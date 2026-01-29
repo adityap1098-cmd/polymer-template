@@ -27,7 +27,7 @@ class WalletInfo:
     unique_token_count: int
     first_transaction_time: Optional[datetime]
     initial_funder: Optional[str]
-    initial_balance: Optional[float]
+    current_balance: Optional[float]  # Current SOL balance
     total_transactions: int
 
 
@@ -283,12 +283,12 @@ class WalletAnalyzer:
         signatures = await self.get_signatures_for_address(address, limit=100)
         total_tx = len(signatures) if signatures else 0
 
-        # Get initial balance estimate (current SOL balance as approximation)
+        # Get current balance
         try:
             balance_result = await self._rpc_call("getBalance", [address])
-            initial_balance = balance_result.get("value", 0) / 1e9  # Convert lamports to SOL
+            current_balance = balance_result.get("value", 0) / 1e9  # Convert lamports to SOL
         except RuntimeError:
-            initial_balance = None
+            current_balance = None
 
         # Classify wallet
         wallet_type = self._classify_wallet(unique_count)
@@ -299,6 +299,6 @@ class WalletAnalyzer:
             unique_token_count=unique_count,
             first_transaction_time=first_tx_time,
             initial_funder=initial_funder,
-            initial_balance=initial_balance,
+            current_balance=current_balance,
             total_transactions=total_tx
         )
