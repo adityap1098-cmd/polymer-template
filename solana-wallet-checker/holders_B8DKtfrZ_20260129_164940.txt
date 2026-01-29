@@ -1,0 +1,199 @@
+
+================================================================================
+TOP 14 TOKEN HOLDERS - RISK ANALYSIS
+Token: B8DKtfrZhXyVdfc6y59apHCWvQEWASvwV7Jr1hccpump
+================================================================================
+
+📊 RISK SUMMARY:
+   Critical Risk: 0 holders
+   High Risk: 1 holders
+   Medium Risk: 11 holders
+   Low Risk: 2 holders
+
+================================================================================
+
+# 1 🟠 HIGH (Score: 65/100) ─────────────────────
+    Significant risk indicators present
+    Wallet:         868mnDHZWHNqRnocnqdcf1JjcZNP3kPi8T3MRT1Q2Tff
+    Balance:        263,927,944.399691 tokens (55.06% of top 14)
+    First Purchase: Unknown
+    Trading History: 1 different tokens traded
+    ⚠️  Risk Factors:
+       • ⚠️  Low token diversity: 1 tokens (20pts)
+       • 🐋 Large holder: 55.06% of supply (30pts)
+       • 🔍 Large holder with minimal trading activity (15pts)
+
+# 2 🟡 MEDIUM (Score: 30/100) ─────────────────────
+    Moderate risk factors detected
+    Wallet:         2NxsrGQtXNr3LSWRt3bDDoymA921j2FNxeoh3MhowJ3M
+    Balance:        22,550,940.174763 tokens (4.70% of top 14)
+    First Purchase: Unknown
+    Trading History: 132 different tokens traded
+    ⚠️  Risk Factors:
+       • 📈 Notable holder: 4.70% (10pts)
+       • ⚠️  Moderate coordination: Group of 11 wallets, 1 common tokens (20pts)
+
+# 3 🟡 MEDIUM (Score: 30/100) ─────────────────────
+    Moderate risk factors detected
+    Wallet:         J9ZFuAdfNAcWiP5kPtv6VxrxxqKsFrJ8pbWT24RGtHyi
+    Balance:        20,096,002.788717 tokens (4.19% of top 14)
+    First Purchase: Unknown
+    Trading History: 12 different tokens traded
+    ⚠️  Risk Factors:
+       • 📈 Notable holder: 4.19% (10pts)
+       • ⚠️  Moderate coordination: Group of 11 wallets, 1 common tokens (20pts)
+
+# 4 🟡 MEDIUM (Score: 30/100) ─────────────────────
+    Moderate risk factors detected
+    Wallet:         BNnN2MqfWLvgThYBsv6v8JQaYZXYKYahC5YCy27Ct1cX
+    Balance:        19,722,258.213052 tokens (4.11% of top 14)
+    First Purchase: Unknown
+    Trading History: 15 different tokens traded
+    ⚠️  Risk Factors:
+       • 📈 Notable holder: 4.11% (10pts)
+       • ⚠️  Moderate coordination: Group of 11 wallets, 1 common tokens (20pts)
+
+# 5 🟡 MEDIUM (Score: 30/100) ─────────────────────
+    Moderate risk factors detected
+    Wallet:         286CHN57Km41GsAnDv866WKd6YB6HPSjFgF4rGDJTRLf
+    Balance:        18,118,601.983788 tokens (3.78% of top 14)
+    First Purchase: Unknown
+    Trading History: 12 different tokens traded
+    ⚠️  Risk Factors:
+       • 📈 Notable holder: 3.78% (10pts)
+       • ⚠️  Moderate coordination: Group of 11 wallets, 1 common tokens (20pts)
+
+# 6 🟡 MEDIUM (Score: 30/100) ─────────────────────
+    Moderate risk factors detected
+    Wallet:         GXStWSVmrHPYAk4CEB2ihCBiougNna8rjRAyEGR2xBiD
+    Balance:        16,888,501.708171 tokens (3.52% of top 14)
+    First Purchase: Unknown
+    Trading History: 12 different tokens traded
+    ⚠️  Risk Factors:
+       • 📈 Notable holder: 3.52% (10pts)
+       • ⚠️  Moderate coordination: Group of 11 wallets, 1 common tokens (20pts)
+
+# 7 🟡 MEDIUM (Score: 30/100) ─────────────────────
+    Moderate risk factors detected
+    Wallet:         At1EVwUzAQsVrxjgPyxmcEKchsuNjNBrfNveN7AA4odk
+    Balance:        15,625,841.848828 tokens (3.26% of top 14)
+    First Purchase: Unknown
+    Trading History: 17 different tokens traded
+    ⚠️  Risk Factors:
+       • 📈 Notable holder: 3.26% (10pts)
+       • ⚠️  Moderate coordination: Group of 11 wallets, 1 common tokens (20pts)
+
+# 8 🟡 MEDIUM (Score: 30/100) ─────────────────────
+    Moderate risk factors detected
+    Wallet:         6X3GEbxyAR4bQMjJXPZx2aEzjuVuwyPhajgRtSZNMxqW
+    Balance:        14,741,743.290841 tokens (3.08% of top 14)
+    First Purchase: Unknown
+    Trading History: 12 different tokens traded
+    ⚠️  Risk Factors:
+       • 📈 Notable holder: 3.08% (10pts)
+       • ⚠️  Moderate coordination: Group of 11 wallets, 1 common tokens (20pts)
+
+# 9 🟡 MEDIUM (Score: 30/100) ─────────────────────
+    Moderate risk factors detected
+    Wallet:         54xrJ798DGwH1UA2H35QtAzKT55t8pL8bjBs9Arz3eoP
+    Balance:        14,251,793.880963 tokens (2.97% of top 14)
+    First Purchase: Unknown
+    Trading History: 6 different tokens traded
+    ⚠️  Risk Factors:
+       • 📈 Notable holder: 2.97% (10pts)
+       • ⚠️  Moderate coordination: Group of 11 wallets, 1 common tokens (20pts)
+
+#10 🟡 MEDIUM (Score: 30/100) ─────────────────────
+    Moderate risk factors detected
+    Wallet:         EvPxwqkSMfreiFLJ917eCdXFhwzgc2FYY6v7rhazyext
+    Balance:        13,984,902.088119 tokens (2.92% of top 14)
+    First Purchase: Unknown
+    Trading History: 15 different tokens traded
+    ⚠️  Risk Factors:
+       • 📈 Notable holder: 2.92% (10pts)
+       • ⚠️  Moderate coordination: Group of 11 wallets, 1 common tokens (20pts)
+
+#11 🟡 MEDIUM (Score: 30/100) ─────────────────────
+    Moderate risk factors detected
+    Wallet:         3GzBLpxTWWTPWwBYQ8Jgrz5XLUCg9aY6HiB3GEBUBAv6
+    Balance:        13,805,580.749136 tokens (2.88% of top 14)
+    First Purchase: Unknown
+    Trading History: 12 different tokens traded
+    ⚠️  Risk Factors:
+       • 📈 Notable holder: 2.88% (10pts)
+       • ⚠️  Moderate coordination: Group of 11 wallets, 1 common tokens (20pts)
+
+#12 🟡 MEDIUM (Score: 30/100) ─────────────────────
+    Moderate risk factors detected
+    Wallet:         771Hy8DqjELJxpSrZ6qq3k2b4GfhtTpNYtsiffbtYBQ6
+    Balance:        13,805,580.749136 tokens (2.88% of top 14)
+    First Purchase: Unknown
+    Trading History: 12 different tokens traded
+    ⚠️  Risk Factors:
+       • 📈 Notable holder: 2.88% (10pts)
+       • ⚠️  Moderate coordination: Group of 11 wallets, 1 common tokens (20pts)
+
+#13 🟢 LOW (Score: 10/100) ─────────────────────
+    Normal holder behavior
+    Wallet:         7Nt5HFpWzDfcvQLRmdRPkvDdq68n821wP1AGaWyqiAL6
+    Balance:        16,349,625.709116 tokens (3.41% of top 14)
+    First Purchase: Unknown
+    Trading History: 15 different tokens traded
+    ⚠️  Risk Factors:
+       • 📈 Notable holder: 3.41% (10pts)
+
+#14 🟢 LOW (Score: 10/100) ─────────────────────
+    Normal holder behavior
+    Wallet:         4Tf8hNjzyDQpbQ2CrJHqL9kC6HnDaN9pg4nEzdgHxVaG
+    Balance:        15,488,179.286355 tokens (3.23% of top 14)
+    First Purchase: Unknown
+    Trading History: 8 different tokens traded
+    ⚠️  Risk Factors:
+       • 📈 Notable holder: 3.23% (10pts)
+
+================================================================================
+Total Balance (Top 14): 479,357,496.870676 tokens
+================================================================================
+
+
+🔍 =============================================================================
+TRADING PATTERN SIMILARITY ANALYSIS
+================================================================================
+
+Found 1 group(s) of wallets with similar trading patterns
+
+📊 GROUP #1 - 11 Wallets
+────────────────────────────────────────────────────────────────────────────────
+Common Tokens Traded: 1 tokens
+
+Wallets in this group:
+  • BNnN2MqfWLvgThYBsv6v8JQaYZXYKYahC5YCy27Ct1cX
+    Balance: 19,722,258.21 tokens
+  • 3GzBLpxTWWTPWwBYQ8Jgrz5XLUCg9aY6HiB3GEBUBAv6
+    Balance: 13,805,580.75 tokens
+  • 6X3GEbxyAR4bQMjJXPZx2aEzjuVuwyPhajgRtSZNMxqW
+    Balance: 14,741,743.29 tokens
+  • GXStWSVmrHPYAk4CEB2ihCBiougNna8rjRAyEGR2xBiD
+    Balance: 16,888,501.71 tokens
+  • At1EVwUzAQsVrxjgPyxmcEKchsuNjNBrfNveN7AA4odk
+    Balance: 15,625,841.85 tokens
+  • EvPxwqkSMfreiFLJ917eCdXFhwzgc2FYY6v7rhazyext
+    Balance: 13,984,902.09 tokens
+  • 286CHN57Km41GsAnDv866WKd6YB6HPSjFgF4rGDJTRLf
+    Balance: 18,118,601.98 tokens
+  • 771Hy8DqjELJxpSrZ6qq3k2b4GfhtTpNYtsiffbtYBQ6
+    Balance: 13,805,580.75 tokens
+  • 2NxsrGQtXNr3LSWRt3bDDoymA921j2FNxeoh3MhowJ3M
+    Balance: 22,550,940.17 tokens
+  • 54xrJ798DGwH1UA2H35QtAzKT55t8pL8bjBs9Arz3eoP
+    Balance: 14,251,793.88 tokens
+  • J9ZFuAdfNAcWiP5kPtv6VxrxxqKsFrJ8pbWT24RGtHyi
+    Balance: 20,096,002.79 tokens
+
+Sample Common Tokens (showing up to 10):
+  • So111111111111111111...1111111112
+
+⚠️  Note: These wallets may be controlled by the same entity
+    or coordinated buyers (pump groups).
+
+================================================================================

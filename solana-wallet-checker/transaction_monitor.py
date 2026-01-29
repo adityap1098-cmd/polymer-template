@@ -7,6 +7,7 @@ import asyncio
 import json
 from datetime import datetime
 from typing import Callable, Optional, Set
+import time
 
 import aiohttp
 import websockets
@@ -44,6 +45,9 @@ class TransactionMonitor:
         self._running = False
         self._processed_signatures: Set[str] = set()
         self._session: Optional[aiohttp.ClientSession] = None
+        self._last_rpc_call = 0
+        self._min_rpc_interval = 0.05  # Minimum 0.05s between RPC calls (QuickNode optimized)
+        self._rate_limit_sleep = 1  # Sleep 1s when rate limited
 
     async def _get_session(self) -> aiohttp.ClientSession:
         """Get or create aiohttp session."""
@@ -56,17 +60,26 @@ class TransactionMonitor:
         if self._session and not self._session.closed:
             await self._session.close()
 
-    async def _rpc_call(self, method: str, params: list) -> dict:
+    async def _rpc_call(self, method: str, params: list, max_retries: int = 3) -> dict:
         """
-        Make an RPC call to the Solana node.
+        Make an RPC call to the Solana node with rate limiting and retry.
 
         Args:
             method: RPC method name
             params: Method parameters
+            max_retries: Maximum number of retries on rate limit
 
         Returns:
             RPC response result
         """
+        # Rate limiting: ensure minimum interval between calls
+        now = time.time()
+        time_since_last_call = now - self._last_rpc_call
+        if time_since_last_call < self._min_rpc_interval:
+            await asyncio.sleep(self._min_rpc_interval - time_since_last_call)
+        
+        self._last_rpc_call = time.time()
+        
         session = await self._get_session()
         payload = {
             "jsonrpc": "2.0",
@@ -75,14 +88,27 @@ class TransactionMonitor:
             "params": params
         }
 
-        try:
-            async with session.post(self.rpc_url, json=payload) as response:
-                data = await response.json()
-                if "error" in data:
-                    raise RuntimeError(f"RPC Error: {data['error']}")
-                return data.get("result", {})
-        except aiohttp.ClientError as e:
-            raise RuntimeError(f"Network error: {e}") from e
+        for attempt in range(max_retries):
+            try:
+                async with session.post(self.rpc_url, json=payload) as response:
+                    data = await response.json()
+                    if "error" in data:
+                        error = data['error']
+                        # Handle rate limit (429)
+                        if isinstance(error, dict) and error.get('code') == 429:
+                            if attempt < max_retries - 1:
+                                sleep_time = self._rate_limit_sleep * (attempt + 1)
+                                await asyncio.sleep(sleep_time)
+                                continue
+                        raise RuntimeError(f"RPC Error: {error}")
+                    return data.get("result", {})
+            except aiohttp.ClientError as e:
+                if attempt < max_retries - 1:
+                    await asyncio.sleep(1)
+                    continue
+                raise RuntimeError(f"Network error: {e}") from e
+        
+        return {}
 
     async def _get_signatures_for_token(self, limit: int = 20) -> list:
         """
@@ -267,6 +293,9 @@ class TransactionMonitor:
                                                     self.token_address
                                                 )
                                     except RuntimeError as e:
+                                        if "429" in str(e):
+                                            # Rate limited, wait longer
+                                            await asyncio.sleep(self._rate_limit_sleep)
                                         print(f"Error processing tx: {e}")
 
                         except json.JSONDecodeError:

@@ -1,0 +1,72 @@
+
+================================================================================
+TOP 5 TOKEN HOLDERS - RISK ANALYSIS
+Token: B8DKtfrZhXyVdfc6y59apHCWvQEWASvwV7Jr1hccpump
+================================================================================
+
+📊 RISK SUMMARY:
+   Critical Risk: 1 holders
+   High Risk: 4 holders
+   Medium Risk: 0 holders
+   Low Risk: 0 holders
+
+================================================================================
+
+# 1 🔴 CRITICAL (Score: 70/100) ─────────────────────
+    High risk of manipulation/coordination
+    Wallet:         868mnDHZWHNqRnocnqdcf1JjcZNP3kPi8T3MRT1Q2Tff
+    Balance:        263,927,944.400000 tokens (76.63% of top 5)
+    First Purchase: Unknown
+    Trading History: 0 different tokens traded
+    ⚠️  Risk Factors:
+       • ❌ No trading history (25pts)
+       • 🐋 Large holder: 76.63% of supply (30pts)
+       • 🔍 Large holder with minimal trading activity (15pts)
+
+# 2 🟠 HIGH (Score: 60/100) ─────────────────────
+    Significant risk indicators present
+    Wallet:         2NxsrGQtXNr3LSWRt3bDDoymA921j2FNxeoh3MhowJ3M
+    Balance:        22,550,940.170000 tokens (6.55% of top 5)
+    First Purchase: Unknown
+    Trading History: 0 different tokens traded
+    ⚠️  Risk Factors:
+       • ❌ No trading history (25pts)
+       • 📊 Significant holder: 6.55% (20pts)
+       • 🔍 Large holder with minimal trading activity (15pts)
+
+# 3 🟠 HIGH (Score: 60/100) ─────────────────────
+    Significant risk indicators present
+    Wallet:         J9ZFuAdfNAcWiP5kPtv6VxrxxqKsFrJ8pbWT24RGtHyi
+    Balance:        20,096,002.790000 tokens (5.83% of top 5)
+    First Purchase: Unknown
+    Trading History: 0 different tokens traded
+    ⚠️  Risk Factors:
+       • ❌ No trading history (25pts)
+       • 📊 Significant holder: 5.83% (20pts)
+       • 🔍 Large holder with minimal trading activity (15pts)
+
+# 4 🟠 HIGH (Score: 60/100) ─────────────────────
+    Significant risk indicators present
+    Wallet:         BNnN2MqfWLvgThYBsv6v8JQaYZXYKYahC5YCy27Ct1cX
+    Balance:        19,722,258.210000 tokens (5.73% of top 5)
+    First Purchase: Unknown
+    Trading History: 0 different tokens traded
+    ⚠️  Risk Factors:
+       • ❌ No trading history (25pts)
+       • 📊 Significant holder: 5.73% (20pts)
+       • 🔍 Large holder with minimal trading activity (15pts)
+
+# 5 🟠 HIGH (Score: 60/100) ─────────────────────
+    Significant risk indicators present
+    Wallet:         286CHN57Km41GsAnDv866WKd6YB6HPSjFgF4rGDJTRLf
+    Balance:        18,118,601.980000 tokens (5.26% of top 5)
+    First Purchase: Unknown
+    Trading History: 0 different tokens traded
+    ⚠️  Risk Factors:
+       • ❌ No trading history (25pts)
+       • 📊 Significant holder: 5.26% (20pts)
+       • 🔍 Large holder with minimal trading activity (15pts)
+
+================================================================================
+Total Balance (Top 5): 344,415,747.550000 tokens
+================================================================================

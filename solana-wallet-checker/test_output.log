@@ -1,0 +1,143 @@
+
+================================================================================
+🧪 TESTING RISK SCORING SYSTEM
+================================================================================
+Token: 3d17dR2LMFuYyHpVi2Zu26v4WpEVQx2WBohTArYGpump
+Number of holders to analyze: 10
+================================================================================
+
+📊 Fetching top holders...
+Fetching token accounts for 3d17dR2LMFuYyHpVi2Zu26v4WpEVQx2WBohTArYGpump...
+Found 20 token accounts via getTokenLargestAccounts
+Analyzing top 9 holders...
+✅ Found 9 holders
+
+🔍 Analyzing trading pattern similarities...
+
+🔍 Analyzing trading patterns for 9 holders...
+This may take a while...
+
+📊 Progress: Fetching trading history for each wallet...
+   [3/9] wallets processed...
+   [6/9] wallets processed...
+   [9/9] wallets processed...
+✅ Trading history collection complete!
+
+
+================================================================================
+TOP 9 TOKEN HOLDERS - RISK ANALYSIS
+Token: 3d17dR2LMFuYyHpVi2Zu26v4WpEVQx2WBohTArYGpump
+================================================================================
+
+📊 RISK SUMMARY:
+   Critical Risk: 1 holders
+   High Risk: 8 holders
+   Medium Risk: 0 holders
+   Low Risk: 0 holders
+
+================================================================================
+
+# 1 🔴 CRITICAL (Score: 70/100) ─────────────────────
+    High risk of manipulation/coordination
+    Wallet:         AjBjHWzSUsLkYFHfN8GF9zdocnzcy7ugq26qaiQjoSaH
+    Balance:        88,785,694.911460 tokens (37.59% of top 9)
+    First Purchase: Unknown
+    Trading History: 0 different tokens traded
+    ⚠️  Risk Factors:
+       • ❌ No trading history (25pts)
+       • 🐋 Large holder: 37.59% of supply (30pts)
+       • 🔍 Large holder with minimal trading activity (15pts)
+
+# 2 🟠 HIGH (Score: 60/100) ─────────────────────
+    Significant risk indicators present
+    Wallet:         7WpUUSnZ9BkfLv5XJ2CHVU4uuPrnxC9tH5tDP8gbSxRF
+    Balance:        23,116,362.260360 tokens (9.79% of top 9)
+    First Purchase: Unknown
+    Trading History: 0 different tokens traded
+    ⚠️  Risk Factors:
+       • ❌ No trading history (25pts)
+       • 📊 Significant holder: 9.79% (20pts)
+       • 🔍 Large holder with minimal trading activity (15pts)
+
+# 3 🟠 HIGH (Score: 60/100) ─────────────────────
+    Significant risk indicators present
+    Wallet:         6M7TM6Zyek8RkezhJM1aJxYB2xKDKfTQTE97kw7Uf8Tw
+    Balance:        19,970,356.137294 tokens (8.46% of top 9)
+    First Purchase: Unknown
+    Trading History: 0 different tokens traded
+    ⚠️  Risk Factors:
+       • ❌ No trading history (25pts)
+       • 📊 Significant holder: 8.46% (20pts)
+       • 🔍 Large holder with minimal trading activity (15pts)
+
+# 4 🟠 HIGH (Score: 60/100) ─────────────────────
+    Significant risk indicators present
+    Wallet:         Leyten1iTYhuM6Jcn1tJpEBakcDWuMVj1fyXPo146WN
+    Balance:        19,896,207.781034 tokens (8.42% of top 9)
+    First Purchase: Unknown
+    Trading History: 0 different tokens traded
+    ⚠️  Risk Factors:
+       • ❌ No trading history (25pts)
+       • 📊 Significant holder: 8.42% (20pts)
+       • 🔍 Large holder with minimal trading activity (15pts)
+
+# 5 🟠 HIGH (Score: 60/100) ─────────────────────
+    Significant risk indicators present
+    Wallet:         FTwXJM2bkEktfEU5y9QYjrm4Z2YR5QUZ15TmDB4pT3XX
+    Balance:        17,686,861.490061 tokens (7.49% of top 9)
+    First Purchase: Unknown
+    Trading History: 0 different tokens traded
+    ⚠️  Risk Factors:
+       • ❌ No trading history (25pts)
+       • 📊 Significant holder: 7.49% (20pts)
+       • 🔍 Large holder with minimal trading activity (15pts)
+
+# 6 🟠 HIGH (Score: 60/100) ─────────────────────
+    Significant risk indicators present
+    Wallet:         2yjzzp2mm4eWtC1zzAXphUG4fk6sx5AP7MeXNCPWvTNA
+    Balance:        17,551,063.020328 tokens (7.43% of top 9)
+    First Purchase: Unknown
+    Trading History: 0 different tokens traded
+    ⚠️  Risk Factors:
+       • ❌ No trading history (25pts)
+       • 📊 Significant holder: 7.43% (20pts)
+       • 🔍 Large holder with minimal trading activity (15pts)
+
+# 7 🟠 HIGH (Score: 60/100) ─────────────────────
+    Significant risk indicators present
+    Wallet:         hqwzoVrUgMPkJDbz9dA1fziYuRJ2392BqEtUfMi1PPV
+    Balance:        16,909,857.078556 tokens (7.16% of top 9)
+    First Purchase: Unknown
+    Trading History: 0 different tokens traded
+    ⚠️  Risk Factors:
+       • ❌ No trading history (25pts)
+       • 📊 Significant holder: 7.16% (20pts)
+       • 🔍 Large holder with minimal trading activity (15pts)
+
+# 8 🟠 HIGH (Score: 60/100) ─────────────────────
+    Significant risk indicators present
+    Wallet:         EurDDWX7xm4ZgUkzo3Qu9RgAubwr24cbTnWL7AbU2CBz
+    Balance:        16,872,583.710804 tokens (7.14% of top 9)
+    First Purchase: Unknown
+    Trading History: 0 different tokens traded
+    ⚠️  Risk Factors:
+       • ❌ No trading history (25pts)
+       • 📊 Significant holder: 7.14% (20pts)
+       • 🔍 Large holder with minimal trading activity (15pts)
+
+# 9 🟠 HIGH (Score: 60/100) ─────────────────────
+    Significant risk indicators present
+    Wallet:         CKSYzBsHgrxikDrFsL1o3pj5nas3w8CxxUuCyqFav2vB
+    Balance:        15,396,832.446244 tokens (6.52% of top 9)
+    First Purchase: Unknown
+    Trading History: 0 different tokens traded
+    ⚠️  Risk Factors:
+       • ❌ No trading history (25pts)
+       • 📊 Significant holder: 6.52% (20pts)
+       • 🔍 Large holder with minimal trading activity (15pts)
+
+================================================================================
+Total Balance (Top 9): 236,185,818.836141 tokens
+================================================================================
+
+✅ Results saved to: holder_analysis_risk_3d17dR2LMF.txt
