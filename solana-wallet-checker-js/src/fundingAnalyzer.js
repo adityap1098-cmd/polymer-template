@@ -10,7 +10,7 @@
  */
 
 import { RateLimitedRPC } from './rateLimiter.js';
-import { isLiquidityProgram, identifyExchange } from './knownEntities.js';
+import { isLiquidityProgram, identifyExchange, getEntityLabel } from './knownEntities.js';
 
 export class FundingAnalyzer {
   /**
@@ -294,12 +294,15 @@ export class FundingAnalyzer {
       if (!data) continue;
 
       const wallet = holder.owner;
-      const funder = data.funder ? `${data.funder.slice(0, 12)}...${data.funder.slice(-6)}` : 'Unknown';
-      const hop2 = data.funderOfFunder ? `← ${data.funderOfFunder.slice(0, 12)}...` : '';
+      const funderLabel = data.funder ? (getEntityLabel(data.funder) || '') : '';
+      const funder = data.funder || 'Unknown';
+      const hop2Label = data.funderOfFunder ? (getEntityLabel(data.funderOfFunder) || '') : '';
+      const hop2 = data.funderOfFunder ? `← ${data.funderOfFunder} ${hop2Label}` : '';
       const amount = data.fundingAmountSOL > 0 ? ` (${data.fundingAmountSOL.toFixed(4)} SOL)` : '';
       const time = data.fundedAt ? data.fundedAt.toISOString().replace('T', ' ').split('.')[0] : '?';
 
-      lines.push(`  ${wallet.slice(0, 16)}... ← ${funder}${amount} [${time}] ${hop2}`);
+      lines.push(`  ${wallet}`);
+      lines.push(`    ← ${funder} ${funderLabel}${amount} [${time}] ${hop2}`);
     }
 
     // Sybil clusters
@@ -310,22 +313,23 @@ export class FundingAnalyzer {
 
       for (let i = 0; i < analysis.clusters.length; i++) {
         const cluster = analysis.clusters[i];
+        const funderEntityLabel = cluster.funder ? (getEntityLabel(cluster.funder) || '') : '';
         const typeLabel = cluster.type === 'INTER_HOLDER_FUNDING'
           ? '⚠️  HOLDERS FUNDING EACH OTHER'
-          : `🔗 Shared Funder: ${cluster.funder.slice(0, 16)}...`;
+          : `🔗 Shared Funder: ${cluster.funder} ${funderEntityLabel}`;
 
         lines.push(`\n  Cluster #${i + 1} — ${cluster.walletCount} wallets — ${typeLabel}`);
 
         for (const wallet of cluster.wallets) {
           const holderInfo = holders.find(h => h.owner === wallet);
           const bal = holderInfo ? holderInfo.balance.toLocaleString('en-US', { minimumFractionDigits: 2 }) : '?';
-          lines.push(`    • ${wallet.slice(0, 16)}... (${bal} tokens)`);
+          lines.push(`    • ${wallet}  (${bal} tokens)`);
         }
 
         if (cluster.transfers) {
           lines.push('  Direct transfers:');
           for (const t of cluster.transfers) {
-            lines.push(`    ${t.from.slice(0, 12)}... → ${t.to.slice(0, 12)}... (${t.amountSOL.toFixed(4)} SOL)`);
+            lines.push(`    ${t.from} → ${t.to} (${t.amountSOL.toFixed(4)} SOL)`);
           }
         }
       }
@@ -339,7 +343,13 @@ export class FundingAnalyzer {
       lines.push('🎯 SNIPER PATTERNS (funded ≤ 1hr before purchase):');
       lines.push('─'.repeat(80));
       for (const s of analysis.sniperPatterns) {
-        lines.push(`  ⚡ ${s.wallet.slice(0, 16)}... funded ${s.minutesBetween}min before buy (${s.fundingAmountSOL.toFixed(4)} SOL from ${s.funder.slice(0, 12)}...)`);
+        const sniperFunderLabel = getEntityLabel(s.funder);
+        const funderNote = sniperFunderLabel ? ` ${sniperFunderLabel}` : '';
+        lines.push(`  ⚡ ${s.wallet}`);
+        lines.push(`    funded ${s.minutesBetween}min before buy (${s.fundingAmountSOL.toFixed(4)} SOL from ${s.funder}${funderNote})`);
+        if (sniperFunderLabel && sniperFunderLabel.includes('🏦')) {
+          lines.push(`    ℹ️  Note: Funded by exchange — this is normal withdrawal behavior, not necessarily sniping`);
+        }
       }
     }
 

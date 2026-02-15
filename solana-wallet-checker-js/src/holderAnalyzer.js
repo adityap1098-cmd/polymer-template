@@ -860,7 +860,8 @@ export class HolderAnalyzer {
       lines.push(`    Wallet:         ${holder.owner}`);
       lines.push(`    Balance:        ${holder.balance.toLocaleString('en-US', { minimumFractionDigits: 6 })} tokens (${percentage.toFixed(2)}%)`);
       lines.push(`    First Purchase: ${holder.purchaseTimeStr || 'Unknown'}`);
-      lines.push(`    Wallet Age:     ${age} | Activity: ${freq} | Tokens Traded: ${holder.tokenCount || 0}`);
+      const tokenNote = (holder.tokenCount || 0) === 0 && holder.tradedTokens ? ' (excl. universal)' : '';
+      lines.push(`    Wallet Age:     ${age} | Activity: ${freq} | Tokens Traded: ${holder.tokenCount || 0}${tokenNote}`);
 
       if (risk.factors.length > 0) {
         lines.push('    Risk Factors:');
@@ -887,7 +888,7 @@ export class HolderAnalyzer {
         for (const wallet of group.wallets) {
           const hi = holders.find(h => h.owner === wallet);
           const bal = hi ? hi.balance.toLocaleString('en-US', { minimumFractionDigits: 2 }) : '?';
-          lines.push(`    • ${wallet.slice(0, 16)}...${wallet.slice(-8)} (${bal} tokens)`);
+          lines.push(`    • ${wallet}  (${bal} tokens)`);
         }
         if (group.commonTokens && group.commonTokens.length > 0) {
           lines.push(`  Common tokens (${group.commonTokenCount}):`);
@@ -913,7 +914,7 @@ export class HolderAnalyzer {
         lines.push(`\n  ⏱️  Cluster #${ti + 1} — ${tc.count} wallets bought within ${spreadStr}`);
         lines.push(`  Time range: ${tc.earliest.toISOString().replace('T', ' ').split('.')[0]} → ${tc.latest.toISOString().replace('T', ' ').split('.')[0]}`);
         for (const wallet of tc.wallets) {
-          lines.push(`    • ${wallet.slice(0, 16)}...${wallet.slice(-8)}`);
+          lines.push(`    • ${wallet}`);
         }
       }
       lines.push('');
