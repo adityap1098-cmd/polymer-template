@@ -179,8 +179,8 @@ describe('HolderAnalyzer - Risk Scoring', () => {
 
     const output = analyzer.formatHoldersOutput(holders, 'TestToken123');
     assert.ok(output.includes('RISK ANALYSIS'));
-    assert.ok(output.includes('TOKEN HEALTH OVERVIEW'));
-    assert.ok(output.includes('Gini Coefficient'));
+    assert.ok(output.includes('QUICK VERDICT'));
+    assert.ok(output.includes('Gini'));
     assert.ok(output.includes('Wallet1'));
     assert.ok(output.includes('Wallet2'));
   });

@@ -49,8 +49,9 @@ export const EXCHANGE_WALLETS = new Map([
   // Raydium Authority (not a person)
   ['5Q544fKrFoe6tsEbD7S8EmxGTJYAKtTVhAW5Q5pge4j1', 'Raydium Authority'],
 
-  // Known Bots / Volume Bots
+  // Known Bots / Volume Bots / MEV
   ['5Z84wihCtpNP9W58KoExJ5e9CG4SP2QUUg6tsnXb9WGF', '⚡ BoostLegends VolumeBot'],
+  ['po27vzv7pSZYsroDopmGVVBVAqxg4GcyZXxmCkoejFB', '🤖 Sniper MEV Bot'],
 ]);
 
 // ─── KNOWN DEX / LIQUIDITY / PROGRAM WALLETS ───────────────────────────────
@@ -83,6 +84,7 @@ export const LIQUIDITY_PROGRAMS = new Set([
   '39azUYFWPz3VHgKCf3VChUwbpURdCHRxjWVowf5jUJjg',  // Pump.fun DEX
   'FWMFkL4gJbLphiEejbt6KDj5FbN6cYAbyMfDUZ4dfFdb',  // Pump.fun LP Token vault
   '2DxxYabaeF2eCi2duW9EA9QNr1UjAPqyMXrWmYW7ZxSD',  // Pump.fun Liquidity Wallet
+  '6UxXQsbGLc6r3cet3z5bqM7mMYxmbawkDpRx4Ku8RaqX',  // Pump.fun ALIENSCANNER Bonding Curve
 
   // Meteora
   'LBUZKhRxPF3XUpBCjp4YzTKgLccjZhTSDM9YuVaPwxo',   // Meteora DLMM

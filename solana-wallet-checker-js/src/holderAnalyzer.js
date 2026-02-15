@@ -780,146 +780,237 @@ export class HolderAnalyzer {
 
     // Token Health Overview
     const health = this.calculateTokenHealth(holders, similarityAnalysis, fundingAnalysis);
-
-    lines.push('');
-    lines.push('╔' + '═'.repeat(78) + '╗');
-    lines.push('║  TOKEN HOLDER RISK ANALYSIS — ENHANCED                                      ║');
-    lines.push('║  Jaccard Similarity · Gini Index · Timing Correlation · Funding Chain        ║');
-    lines.push('╚' + '═'.repeat(78) + '╝');
-    lines.push(`  Token: ${tokenMint}`);
-    lines.push(`  Holders Analyzed: ${holders.length}`);
-    lines.push('');
-
-    // ── FILTERED ENTITIES ──
-    if (filteredEntities && filteredEntities.length > 0) {
-      lines.push('┌' + '─'.repeat(78) + '┐');
-      lines.push('│  🔍 FILTERED ENTITIES (excluded from analysis)                               │');
-      lines.push('├' + '─'.repeat(78) + '┤');
-
-      const exchanges = filteredEntities.filter(e => e.type === 'EXCHANGE');
-      const dexes = filteredEntities.filter(e => e.type === 'LIQUIDITY');
-
-      if (exchanges.length > 0) {
-        lines.push('│  🏦 EXCHANGE WALLETS:');
-        for (const ex of exchanges) {
-          const balStr = ex.balance > 0 ? ` (${ex.balance.toLocaleString('en-US', { minimumFractionDigits: 2 })} tokens)` : '';
-          lines.push(`│    • ${ex.label}: ${ex.owner.slice(0, 20)}...${ex.owner.slice(-8)}${balStr}`);
-        }
-      }
-      if (dexes.length > 0) {
-        lines.push('│  🔄 DEX / LIQUIDITY PROGRAMS:');
-        for (const dx of dexes) {
-          lines.push(`│    • ${dx.label}: ${dx.owner.slice(0, 20)}...${dx.owner.slice(-8)}`);
-        }
-      }
-      lines.push(`│  Total Filtered: ${filteredEntities.length} entity(ies)`);
-      lines.push('└' + '─'.repeat(78) + '┘');
-      lines.push('');
-    }
-
-    // ── TOKEN HEALTH OVERVIEW ──
-    lines.push('┌' + '─'.repeat(78) + '┐');
-    lines.push('│  📊 TOKEN HEALTH OVERVIEW                                                    │');
-    lines.push('├' + '─'.repeat(78) + '┤');
-    lines.push(`│  Overall Risk:          ${health.tokenRiskLevel} (Score: ${health.tokenRiskScore}/100)`);
-    lines.push(`│  Gini Coefficient:      ${health.gini} ${health.gini >= 0.7 ? '⚠️  (highly concentrated)' : health.gini >= 0.4 ? '(moderate concentration)' : '(well distributed)'}`);
-    lines.push(`│  Top 5 Concentration:   ${health.top5Concentration}%`);
-    lines.push(`│  Top 10 Concentration:  ${health.top10Concentration}%`);
-    lines.push(`│  Avg Wallet Age:        ${health.avgWalletAge !== null ? health.avgWalletAge + ' days' : 'Unknown'}`);
-    lines.push(`│  Fresh Wallets (≤7d):   ${health.freshWallets}/${holders.length} (${(health.freshWallets / Math.max(1, holders.length) * 100).toFixed(0)}%)`);
-    lines.push(`│  Timing Clusters:       ${health.timingClusterCount} cluster(s), ${health.walletsInTimingClusters} wallets`);
-    lines.push(`│  Sybil Clusters:        ${health.sybilClusterCount} cluster(s), ${health.walletsInSybil} wallets`);
-    lines.push('└' + '─'.repeat(78) + '┘');
-    lines.push('');
-
-    // ── RISK SUMMARY ──
+    const totalBalance = holders.reduce((sum, h) => sum + h.balance, 0);
+    const sorted = [...holders].sort((a, b) => b.riskData.score - a.riskData.score);
     const riskSummary = { '🔴 CRITICAL': 0, '🟠 HIGH': 0, '🟡 MEDIUM': 0, '🟢 LOW': 0 };
     for (const holder of holders) riskSummary[holder.riskData.level]++;
 
-    lines.push('📊 HOLDER RISK DISTRIBUTION:');
-    lines.push(`   🔴 Critical: ${riskSummary['🔴 CRITICAL']}  🟠 High: ${riskSummary['🟠 HIGH']}  🟡 Medium: ${riskSummary['🟡 MEDIUM']}  🟢 Low: ${riskSummary['🟢 LOW']}`);
+    // Calculate sybil controlled %
+    const sybilWallets = new Set();
+    if (fundingAnalysis?.clusters) {
+      for (const c of fundingAnalysis.clusters) c.wallets.forEach(w => sybilWallets.add(w));
+    }
+    const sybilBalance = holders.filter(h => sybilWallets.has(h.owner)).reduce((s, h) => s + h.balance, 0);
+    const sybilPct = totalBalance > 0 ? (sybilBalance / totalBalance * 100).toFixed(1) : '0';
+
+    // Calculate similarity controlled %
+    const simWallets = new Set();
+    if (similarityAnalysis?.groups) {
+      for (const g of similarityAnalysis.groups) g.wallets.forEach(w => simWallets.add(w));
+    }
+    const simBalance = holders.filter(h => simWallets.has(h.owner)).reduce((s, h) => s + h.balance, 0);
+    const simPct = totalBalance > 0 ? (simBalance / totalBalance * 100).toFixed(1) : '0';
+
+    // ═══════════════════════════════════════════════════════════════════
+    // SECTION 1: HEADER + QUICK VERDICT
+    // ═══════════════════════════════════════════════════════════════════
     lines.push('');
-    lines.push('═'.repeat(80));
+    lines.push('╔' + '═'.repeat(78) + '╗');
+    lines.push('║  TOKEN HOLDER RISK ANALYSIS                                                  ║');
+    lines.push('╚' + '═'.repeat(78) + '╝');
+    lines.push(`  Token:  ${tokenMint}`);
+    lines.push(`  Date:   ${new Date().toISOString().replace('T', ' ').split('.')[0]} UTC`);
     lines.push('');
 
-    // ── INDIVIDUAL HOLDERS (sorted by risk) ──
-    const sorted = [...holders].sort((a, b) => b.riskData.score - a.riskData.score);
-    const totalBalance = holders.reduce((sum, h) => sum + h.balance, 0);
+    // ── QUICK VERDICT ──
+    lines.push('┌' + '─'.repeat(78) + '┐');
+    lines.push('│  ⚡ QUICK VERDICT                                                            │');
+    lines.push('├' + '─'.repeat(78) + '┤');
+    lines.push(`│  Overall:   ${health.tokenRiskLevel} (${health.tokenRiskScore}/100)`);
+    lines.push(`│  Holders:   ${holders.length} analyzed${filteredEntities.length > 0 ? `, ${filteredEntities.length} filtered (exchanges/DEX/bots)` : ''}`);
+    lines.push(`│  Gini:      ${health.gini} ${health.gini >= 0.7 ? '⚠️  HIGHLY CONCENTRATED' : health.gini >= 0.4 ? '— moderate concentration' : '— well distributed'}`);
+    lines.push(`│  Top 5:     ${health.top5Concentration}% of supply`);
+    lines.push(`│  Fresh:     ${health.freshWallets}/${holders.length} wallets ≤7 days old (${(health.freshWallets / Math.max(1, holders.length) * 100).toFixed(0)}%)`);
+    if (health.sybilClusterCount > 0) {
+      lines.push(`│  Sybil:     ${health.sybilClusterCount} cluster(s) — ${health.walletsInSybil} wallets control ${sybilPct}%`);
+    }
+    if (similarityAnalysis?.totalGroups > 0) {
+      lines.push(`│  Similar:   ${similarityAnalysis.totalGroups} group(s) — ${simWallets.size} wallets share trading patterns (${simPct}%)`);
+    }
+    if (health.timingClusterCount > 0) {
+      lines.push(`│  Timing:    ${health.timingClusterCount} cluster(s) — coordinated buys detected`);
+    }
+    lines.push('│');
+
+    // Verdict text
+    const critHigh = riskSummary['🔴 CRITICAL'] + riskSummary['🟠 HIGH'];
+    let verdict;
+    if (health.tokenRiskScore >= 60) {
+      verdict = '🚨 HIGH RISK — Kemungkinan besar ada manipulasi. Hati-hati!';
+    } else if (health.tokenRiskScore >= 35) {
+      verdict = '⚠️  MODERATE — Ada indikasi risiko. Perlu investigasi lebih lanjut.';
+    } else {
+      verdict = '✅ LOW RISK — Distribusi holder terlihat normal.';
+    }
+    lines.push(`│  📋 ${verdict}`);
+    lines.push('└' + '─'.repeat(78) + '┘');
+    lines.push('');
+
+    // ── FILTERED ENTITIES (compact) ──
+    if (filteredEntities && filteredEntities.length > 0) {
+      lines.push('🔍 FILTERED (excluded from analysis):');
+      for (const ent of filteredEntities) {
+        const balStr = ent.balance > 0 ? ` — ${ent.balance.toLocaleString('en-US', { minimumFractionDigits: 0 })} tokens` : '';
+        lines.push(`   ${ent.label}: ${ent.owner}${balStr}`);
+      }
+      lines.push('');
+    }
+
+    // ═══════════════════════════════════════════════════════════════════
+    // SECTION 2: RISK DISTRIBUTION BAR
+    // ═══════════════════════════════════════════════════════════════════
+    lines.push(`📊 Risk Distribution: 🔴 ${riskSummary['🔴 CRITICAL']} Critical | 🟠 ${riskSummary['🟠 HIGH']} High | 🟡 ${riskSummary['🟡 MEDIUM']} Medium | 🟢 ${riskSummary['🟢 LOW']} Low`);
+    lines.push('');
+
+    // ═══════════════════════════════════════════════════════════════════
+    // SECTION 3: TOP RISK HOLDERS (detail for score >= 35, compact for rest)
+    // ═══════════════════════════════════════════════════════════════════
+    lines.push('═'.repeat(80));
+    lines.push('  TOP RISK HOLDERS (Score ≥ 35)');
+    lines.push('═'.repeat(80));
+
+    let detailCount = 0;
+    const lowRiskHolders = [];
 
     for (let idx = 0; idx < sorted.length; idx++) {
       const holder = sorted[idx];
       const risk = holder.riskData;
       const percentage = totalBalance > 0 ? (holder.balance / totalBalance * 100) : 0;
-      const age = holder.walletAgeDays !== null && holder.walletAgeDays !== undefined
-        ? `${holder.walletAgeDays}d`
-        : '?';
-      const freq = holder.txFrequency ? `${holder.txFrequency} tx/day` : '?';
 
-      lines.push(`#${String(idx + 1).padStart(2)} ${risk.level} (Score: ${risk.score}/100) ${'─'.repeat(20)}`);
-      lines.push(`    ${risk.description}`);
-      lines.push(`    Wallet:         ${holder.owner}`);
-      lines.push(`    Balance:        ${holder.balance.toLocaleString('en-US', { minimumFractionDigits: 6 })} tokens (${percentage.toFixed(2)}%)`);
-      lines.push(`    First Purchase: ${holder.purchaseTimeStr || 'Unknown'}`);
-      const tokenNote = (holder.tokenCount || 0) === 0 && holder.tradedTokens ? ' (excl. universal)' : '';
-      lines.push(`    Wallet Age:     ${age} | Activity: ${freq} | Tokens Traded: ${holder.tokenCount || 0}${tokenNote}`);
+      if (risk.score >= 35) {
+        detailCount++;
+        const age = holder.walletAgeDays !== null && holder.walletAgeDays !== undefined
+          ? `${holder.walletAgeDays}d` : '?';
+        const tokenNote = (holder.tokenCount || 0) === 0 && holder.tradedTokens ? ' (excl. universal)' : '';
 
-      if (risk.factors.length > 0) {
-        lines.push('    Risk Factors:');
-        for (const factor of risk.factors) lines.push(`       • ${factor}`);
+        lines.push('');
+        lines.push(`  #${String(detailCount).padStart(2)} ${risk.level} — Score: ${risk.score}/100`);
+        lines.push(`  ${holder.owner}`);
+        lines.push(`  ${holder.balance.toLocaleString('en-US', { maximumFractionDigits: 0 })} tokens (${percentage.toFixed(2)}%) | Age: ${age} | Tokens: ${holder.tokenCount || 0}${tokenNote}`);
+        if (holder.purchaseTimeStr && holder.purchaseTimeStr !== 'Unknown') {
+          lines.push(`  First Buy: ${holder.purchaseTimeStr}`);
+        }
+        for (const factor of risk.factors) lines.push(`    → ${factor}`);
+      } else {
+        lowRiskHolders.push(holder);
       }
-      lines.push('');
     }
 
+    // Compact table for low-risk holders
+    if (lowRiskHolders.length > 0) {
+      lines.push('');
+      lines.push('─'.repeat(80));
+      lines.push('  OTHER HOLDERS (Score < 35)');
+      lines.push('─'.repeat(80));
+      lines.push('  Score | %Supply | Age  | Tokens | Wallet');
+      lines.push('  ' + '─'.repeat(75));
+
+      for (const holder of lowRiskHolders) {
+        const pct = totalBalance > 0 ? (holder.balance / totalBalance * 100).toFixed(1) : '0';
+        const age = holder.walletAgeDays !== null && holder.walletAgeDays !== undefined
+          ? `${holder.walletAgeDays}d`.padEnd(4) : '?   ';
+        const tokenNote = (holder.tokenCount || 0) === 0 && holder.tradedTokens ? '*' : '';
+        lines.push(`  ${String(holder.riskData.score).padStart(5)} | ${pct.padStart(6)}% | ${age} | ${String((holder.tokenCount || 0)).padStart(5)}${tokenNote} | ${holder.owner}`);
+      }
+      lines.push('  (* = token count excludes universal tokens like wSOL/USDC)');
+    }
+
+    lines.push('');
     lines.push('═'.repeat(80));
-    lines.push(`Total Balance (Top ${holders.length}): ${totalBalance.toLocaleString('en-US', { minimumFractionDigits: 6 })} tokens`);
+    lines.push(`  Total: ${totalBalance.toLocaleString('en-US', { maximumFractionDigits: 0 })} tokens across ${holders.length} holders`);
     lines.push('═'.repeat(80));
 
-    // ── SIMILARITY GROUPS ──
-    if (similarityAnalysis && similarityAnalysis.groups && similarityAnalysis.groups.length > 0) {
+    // ═══════════════════════════════════════════════════════════════════
+    // SECTION 4: SYBIL & SIMILARITY CLUSTERS (combined, concise)
+    // ═══════════════════════════════════════════════════════════════════
+    const hasSybil = fundingAnalysis?.clusters?.length > 0;
+    const hasSimilarity = similarityAnalysis?.groups?.length > 0;
+    const hasTiming = similarityAnalysis?.timingClusters?.length > 0;
+
+    if (hasSybil || hasSimilarity || hasTiming) {
       lines.push('');
-      lines.push('🔍 TRADING PATTERN SIMILARITY (Jaccard)');
-      lines.push('═'.repeat(80));
-      lines.push(`Found ${similarityAnalysis.totalGroups} group(s)\n`);
+      lines.push('╔' + '═'.repeat(78) + '╗');
+      lines.push('║  🔗 CLUSTER & PATTERN ANALYSIS                                               ║');
+      lines.push('╚' + '═'.repeat(78) + '╝');
+    }
+
+    // Sybil clusters
+    if (hasSybil) {
+      lines.push('');
+      lines.push(`  🚨 SYBIL CLUSTERS — ${fundingAnalysis.clusters.length} detected (${sybilPct}% of supply)`);
+      lines.push('  ' + '─'.repeat(70));
+
+      for (let i = 0; i < fundingAnalysis.clusters.length; i++) {
+        const cluster = fundingAnalysis.clusters[i];
+        const clusterBal = holders.filter(h => cluster.wallets.includes(h.owner))
+          .reduce((s, h) => s + h.balance, 0);
+        const clusterPct = totalBalance > 0 ? (clusterBal / totalBalance * 100).toFixed(1) : '0';
+
+        const funderLabel = cluster.funder ? (getEntityLabel(cluster.funder) || '') : '';
+        const typeStr = cluster.type === 'INTER_HOLDER_FUNDING'
+          ? '⚠️  HOLDERS FUNDING EACH OTHER'
+          : `Funder: ${cluster.funder} ${funderLabel}`;
+
+        lines.push(`\n  Cluster #${i + 1} — ${cluster.walletCount} wallets — ${clusterPct}% supply — ${typeStr}`);
+        for (const wallet of cluster.wallets) {
+          const hi = holders.find(h => h.owner === wallet);
+          const pct = hi && totalBalance > 0 ? (hi.balance / totalBalance * 100).toFixed(1) : '?';
+          lines.push(`    ${wallet}  (${pct}%)`);
+        }
+      }
+    }
+
+    // Similarity groups
+    if (hasSimilarity) {
+      lines.push('');
+      lines.push(`  🔍 TRADING SIMILARITY — ${similarityAnalysis.totalGroups} group(s) (Jaccard method)`);
+      lines.push('  ' + '─'.repeat(70));
 
       for (let gi = 0; gi < similarityAnalysis.groups.length; gi++) {
         const group = similarityAnalysis.groups[gi];
-        lines.push(`  📊 Group #${gi + 1} — ${group.walletCount} wallets — Avg Jaccard: ${group.avgJaccard}`);
-        lines.push('  ' + '─'.repeat(70));
+        const groupBal = holders.filter(h => group.wallets.includes(h.owner))
+          .reduce((s, h) => s + h.balance, 0);
+        const groupPct = totalBalance > 0 ? (groupBal / totalBalance * 100).toFixed(1) : '0';
+
+        let jLabel;
+        if (group.avgJaccard >= 0.8) jLabel = '🔴 NEAR IDENTICAL';
+        else if (group.avgJaccard >= 0.4) jLabel = '🟠 HIGH OVERLAP';
+        else jLabel = '🟡 MODERATE';
+
+        lines.push(`\n  Group #${gi + 1} — ${group.walletCount} wallets — J=${group.avgJaccard} ${jLabel} — ${groupPct}% supply`);
         for (const wallet of group.wallets) {
           const hi = holders.find(h => h.owner === wallet);
-          const bal = hi ? hi.balance.toLocaleString('en-US', { minimumFractionDigits: 2 }) : '?';
-          lines.push(`    • ${wallet}  (${bal} tokens)`);
+          const pct = hi && totalBalance > 0 ? (hi.balance / totalBalance * 100).toFixed(1) : '?';
+          lines.push(`    ${wallet}  (${pct}%)`);
         }
         if (group.commonTokens && group.commonTokens.length > 0) {
-          lines.push(`  Common tokens (${group.commonTokenCount}):`);
-          for (const token of group.commonTokens.slice(0, 5)) {
-            lines.push(`    · ${token}`);
-          }
+          const shown = group.commonTokens.slice(0, 3);
+          const extra = group.commonTokenCount > 3 ? ` +${group.commonTokenCount - 3} more` : '';
+          lines.push(`    Shared: ${shown.join(', ')}${extra}`);
         }
-        lines.push('');
       }
     }
 
-    // ── TIMING CLUSTERS ──
-    if (similarityAnalysis && similarityAnalysis.timingClusters && similarityAnalysis.timingClusters.length > 0) {
+    // Timing clusters
+    if (hasTiming) {
       lines.push('');
-      lines.push('⏱️  BUY-TIMING CORRELATION');
-      lines.push('═'.repeat(80));
+      lines.push(`  ⏱️  COORDINATED BUYS — ${similarityAnalysis.timingClusters.length} cluster(s) detected`);
+      lines.push('  ' + '─'.repeat(70));
 
       for (let ti = 0; ti < similarityAnalysis.timingClusters.length; ti++) {
         const tc = similarityAnalysis.timingClusters[ti];
         const spreadStr = tc.spreadSeconds < 60
-          ? `${tc.spreadSeconds} seconds`
-          : `${Math.round(tc.spreadSeconds / 60)} minutes`;
-        lines.push(`\n  ⏱️  Cluster #${ti + 1} — ${tc.count} wallets bought within ${spreadStr}`);
-        lines.push(`  Time range: ${tc.earliest.toISOString().replace('T', ' ').split('.')[0]} → ${tc.latest.toISOString().replace('T', ' ').split('.')[0]}`);
+          ? `${tc.spreadSeconds}s` : `${Math.round(tc.spreadSeconds / 60)}min`;
+
+        lines.push(`\n  Cluster #${ti + 1} — ${tc.count} wallets within ${spreadStr}`);
+        lines.push(`  ${tc.earliest.toISOString().replace('T', ' ').split('.')[0]} → ${tc.latest.toISOString().replace('T', ' ').split('.')[0]}`);
         for (const wallet of tc.wallets) {
-          lines.push(`    • ${wallet}`);
+          lines.push(`    ${wallet}`);
         }
       }
-      lines.push('');
     }
 
+    lines.push('');
     return lines.join('\n');
   }
 }

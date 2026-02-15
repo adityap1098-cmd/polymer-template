@@ -280,75 +280,75 @@ export class FundingAnalyzer {
   formatFundingOutput(analysis, holders) {
     const lines = [];
     lines.push('');
-    lines.push('💰 ' + '='.repeat(77));
-    lines.push('FUNDING CHAIN ANALYSIS (Sybil Detection)');
-    lines.push('='.repeat(80));
+    lines.push('╔' + '═'.repeat(78) + '╗');
+    lines.push('║  💰 FUNDING CHAIN ANALYSIS                                                   ║');
+    lines.push('╚' + '═'.repeat(78) + '╝');
+
+    // ── Quick summary of known vs unknown funders ──
+    let knownCount = 0;
+    let unknownCount = 0;
+    let entityFunded = 0;
+
+    for (const holder of holders) {
+      const data = analysis.fundingMap.get(holder.owner);
+      if (!data || !data.funder) { unknownCount++; continue; }
+      const label = getEntityLabel(data.funder);
+      if (label) entityFunded++;
+      knownCount++;
+    }
+
+    lines.push(`  Traced: ${knownCount}/${holders.length} | Unknown origin: ${unknownCount} | From known entity: ${entityFunded}`);
     lines.push('');
 
-    // Funding overview per holder
-    lines.push('📋 WALLET FUNDING ORIGINS:');
-    lines.push('─'.repeat(80));
+    // ── Funding table (compact) ──
+    lines.push('  FUNDING ORIGINS:');
+    lines.push('  ' + '─'.repeat(75));
 
     for (const holder of holders) {
       const data = analysis.fundingMap.get(holder.owner);
       if (!data) continue;
 
       const wallet = holder.owner;
-      const funderLabel = data.funder ? (getEntityLabel(data.funder) || '') : '';
-      const funder = data.funder || 'Unknown';
-      const hop2Label = data.funderOfFunder ? (getEntityLabel(data.funderOfFunder) || '') : '';
-      const hop2 = data.funderOfFunder ? `← ${data.funderOfFunder} ${hop2Label}` : '';
-      const amount = data.fundingAmountSOL > 0 ? ` (${data.fundingAmountSOL.toFixed(4)} SOL)` : '';
-      const time = data.fundedAt ? data.fundedAt.toISOString().replace('T', ' ').split('.')[0] : '?';
+      if (!data.funder) {
+        lines.push(`  ${wallet}`);
+        lines.push(`    ← Unknown`);
+        continue;
+      }
+
+      const funderLabel = getEntityLabel(data.funder);
+      const labelStr = funderLabel ? ` ${funderLabel}` : '';
+      const amount = data.fundingAmountSOL > 0 ? `${data.fundingAmountSOL.toFixed(4)} SOL` : '';
+      const time = data.fundedAt
+        ? data.fundedAt.toISOString().replace('T', ' ').split('.')[0].slice(5)
+        : '';
+      const timeAmount = [time, amount].filter(Boolean).join(' | ');
 
       lines.push(`  ${wallet}`);
-      lines.push(`    ← ${funder} ${funderLabel}${amount} [${time}] ${hop2}`);
-    }
+      let funderLine = `    ← ${data.funder}${labelStr}`;
+      if (timeAmount) funderLine += `  [${timeAmount}]`;
 
-    // Sybil clusters
-    if (analysis.clusters.length > 0) {
-      lines.push('');
-      lines.push('🚨 SYBIL CLUSTERS DETECTED:');
-      lines.push('─'.repeat(80));
-
-      for (let i = 0; i < analysis.clusters.length; i++) {
-        const cluster = analysis.clusters[i];
-        const funderEntityLabel = cluster.funder ? (getEntityLabel(cluster.funder) || '') : '';
-        const typeLabel = cluster.type === 'INTER_HOLDER_FUNDING'
-          ? '⚠️  HOLDERS FUNDING EACH OTHER'
-          : `🔗 Shared Funder: ${cluster.funder} ${funderEntityLabel}`;
-
-        lines.push(`\n  Cluster #${i + 1} — ${cluster.walletCount} wallets — ${typeLabel}`);
-
-        for (const wallet of cluster.wallets) {
-          const holderInfo = holders.find(h => h.owner === wallet);
-          const bal = holderInfo ? holderInfo.balance.toLocaleString('en-US', { minimumFractionDigits: 2 }) : '?';
-          lines.push(`    • ${wallet}  (${bal} tokens)`);
-        }
-
-        if (cluster.transfers) {
-          lines.push('  Direct transfers:');
-          for (const t of cluster.transfers) {
-            lines.push(`    ${t.from} → ${t.to} (${t.amountSOL.toFixed(4)} SOL)`);
-          }
-        }
+      // Hop 2
+      if (data.funderOfFunder) {
+        const hop2Label = getEntityLabel(data.funderOfFunder);
+        const hop2Str = hop2Label ? ` ${hop2Label}` : '';
+        funderLine += `\n      ← ${data.funderOfFunder}${hop2Str}`;
       }
-    } else {
-      lines.push('\n  ✅ No sybil clusters detected (no shared funding sources)');
+      lines.push(funderLine);
     }
 
-    // Sniper patterns
+    // Sybil clusters — skip here, already shown in main output
+    // Just show sniper patterns
     if (analysis.sniperPatterns.length > 0) {
       lines.push('');
-      lines.push('🎯 SNIPER PATTERNS (funded ≤ 1hr before purchase):');
-      lines.push('─'.repeat(80));
+      lines.push('  🎯 SNIPER PATTERNS (funded ≤1hr before buy):');
+      lines.push('  ' + '─'.repeat(75));
       for (const s of analysis.sniperPatterns) {
         const sniperFunderLabel = getEntityLabel(s.funder);
         const funderNote = sniperFunderLabel ? ` ${sniperFunderLabel}` : '';
-        lines.push(`  ⚡ ${s.wallet}`);
-        lines.push(`    funded ${s.minutesBetween}min before buy (${s.fundingAmountSOL.toFixed(4)} SOL from ${s.funder}${funderNote})`);
+        lines.push(`  ${s.wallet}`);
+        lines.push(`    funded ${s.minutesBetween}min before buy — ${s.fundingAmountSOL.toFixed(4)} SOL from ${s.funder}${funderNote}`);
         if (sniperFunderLabel && sniperFunderLabel.includes('🏦')) {
-          lines.push(`    ℹ️  Note: Funded by exchange — this is normal withdrawal behavior, not necessarily sniping`);
+          lines.push(`    ℹ️  Exchange withdrawal — likely normal behavior`);
         }
       }
     }
