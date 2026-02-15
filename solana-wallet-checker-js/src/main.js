@@ -1,0 +1,446 @@
+#!/usr/bin/env node
+
+/**
+ * Solana Wallet Checker Bot - Main Entry Point (Node.js version)
+ * 
+ * A real-time Solana token transaction monitor that classifies wallets as:
+ * - FRESH: No other token transactions except current purchase
+ * - SEMI_NEW: Less than 5 different token transactions
+ * - OLD: 5 or more different token transactions
+ * 
+ * Usage: node src/main.js
+ * 
+ * Environment Variables (set in .env file):
+ *   SOLANA_RPC_URL: Solana RPC endpoint
+ *   SOLANA_WSS_URL: Solana WebSocket endpoint
+ *   OLD_WALLET_THRESHOLD: Number of tokens to classify as OLD (default: 5)
+ *   POLL_INTERVAL: Polling interval in seconds (default: 5)
+ */
+
+import 'dotenv/config';
+import { createInterface } from 'readline';
+import { writeFileSync } from 'fs';
+import { PublicKey } from '@solana/web3.js';
+import chalk from 'chalk';
+import { WalletAnalyzer, WalletType, WalletProfile } from './walletAnalyzer.js';
+import { TransactionMonitor } from './transactionMonitor.js';
+import { HolderAnalyzer } from './holderAnalyzer.js';
+import { FundingAnalyzer } from './fundingAnalyzer.js';
+import { CSVImporter } from './csvImporter.js';
+
+// ─── Helpers ────────────────────────────────────────────────────────────────
+
+function rl() {
+  return createInterface({ input: process.stdin, output: process.stdout });
+}
+
+function ask(question) {
+  return new Promise((resolve) => {
+    const r = rl();
+    r.question(question, (answer) => {
+      r.close();
+      resolve(answer.trim());
+    });
+  });
+}
+
+function timestamp() {
+  return new Date().toTimeString().split(' ')[0];
+}
+
+function formatDate(date) {
+  if (!date) return 'Unknown';
+  return date.toISOString().replace('T', ' ').split('.')[0];
+}
+
+function truncateAddress(addr) {
+  if (!addr) return 'Unknown';
+  return `${addr.slice(0, 8)}...${addr.slice(-8)}`;
+}
+
+function validateSolanaAddress(address) {
+  try {
+    new PublicKey(address);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+// ─── Banner ─────────────────────────────────────────────────────────────────
+
+function printBanner() {
+  console.log(chalk.cyan(`
+╔══════════════════════════════════════════════════════════════╗
+║          🔍 SOLANA WALLET CHECKER BOT v2.0 🔍                 ║
+║            Node.js + @solana/web3.js edition                   ║
+║                                                                ║
+║  Enhanced Analysis:                                            ║
+║  • Jaccard Similarity · Gini Coefficient                       ║
+║  • Funding Chain / Sybil Detection                             ║
+║  • Buy-Timing Correlation · Bot Detection                      ║
+╚══════════════════════════════════════════════════════════════╝
+`));
+}
+
+// ─── Wallet Report ──────────────────────────────────────────────────────────
+
+const WALLET_COLORS = {
+  [WalletType.FRESH]: chalk.green,
+  [WalletType.SEMI_NEW]: chalk.yellow,
+  [WalletType.OLD]: chalk.red,
+};
+
+const PROFILE_LABELS = {
+  [WalletProfile.ORGANIC]: chalk.green('🧑 ORGANIC'),
+  [WalletProfile.SNIPER_BOT]: chalk.red('🤖 SNIPER BOT'),
+  [WalletProfile.COPY_TRADER]: chalk.yellow('📋 COPY TRADER'),
+  [WalletProfile.DORMANT]: chalk.gray('💤 DORMANT'),
+  [WalletProfile.FRESH_FUNDED]: chalk.magenta('🆕 FRESH FUNDED'),
+};
+
+function printWalletReport(walletInfo) {
+  const color = WALLET_COLORS[walletInfo.walletType] || chalk.white;
+  const ts = timestamp();
+  const firstTx = formatDate(walletInfo.firstTransactionTime);
+  const funder = truncateAddress(walletInfo.initialFunder);
+  const balance = walletInfo.currentBalance !== null
+    ? `${walletInfo.currentBalance.toFixed(4)} SOL`
+    : 'Unknown';
+  const age = walletInfo.walletAgeDays !== null
+    ? `${walletInfo.walletAgeDays} days`
+    : 'Unknown';
+  const freq = walletInfo.txPerDay
+    ? `${walletInfo.txPerDay} tx/day`
+    : 'Unknown';
+  const profileLabel = PROFILE_LABELS[walletInfo.profile] || walletInfo.profile;
+
+  console.log(`
+${chalk.cyan(`[${ts}]`)} ${chalk.white('NEW BUYER DETECTED')}
+${chalk.white('─'.repeat(60))}
+${chalk.white('Wallet:')}      ${walletInfo.address.slice(0, 20)}...${walletInfo.address.slice(-10)}
+${chalk.white('Status:')}      ${color(`█ ${walletInfo.walletType} █`)}
+${chalk.white('Profile:')}     ${profileLabel}
+${chalk.white('Unique Tokens:')} ${walletInfo.uniqueTokenCount} different tokens traded
+${chalk.white('Total Txns:')}   ${walletInfo.totalTransactions} transactions
+${chalk.white('Wallet Age:')}   ${age} | Activity: ${freq}
+${chalk.white('First Txn:')}    ${firstTx}
+${chalk.white('Funded By:')}    ${funder}
+${chalk.white('SOL Balance:')}  ${balance}
+${chalk.white('─'.repeat(60))}
+`);
+}
+
+// ─── Bot Class ──────────────────────────────────────────────────────────────
+
+class WalletCheckerBot {
+  constructor() {
+    this.rpcUrl = process.env.SOLANA_RPC_URL || 'https://api.mainnet-beta.solana.com';
+    this.wssUrl = process.env.SOLANA_WSS_URL || 'wss://api.mainnet-beta.solana.com';
+    this.oldThreshold = parseInt(process.env.OLD_WALLET_THRESHOLD || '5', 10);
+    this.pollInterval = parseInt(process.env.POLL_INTERVAL || '5', 10);
+
+    this.analyzer = new WalletAnalyzer(this.rpcUrl, this.oldThreshold);
+    this.monitor = null;
+    this._analyzing = new Set();
+  }
+
+  async onTransactionDetected(buyerWallet, signature, tokenAddress) {
+    if (this._analyzing.has(buyerWallet)) return;
+    this._analyzing.add(buyerWallet);
+
+    try {
+      console.log(
+        `${chalk.cyan(`[${timestamp()}]`)} Analyzing wallet: ${buyerWallet.slice(0, 20)}...`
+      );
+      const walletInfo = await this.analyzer.analyzeWallet(buyerWallet, tokenAddress);
+      printWalletReport(walletInfo);
+    } catch (err) {
+      console.error(chalk.red(`Error analyzing wallet ${buyerWallet.slice(0, 20)}...: ${err.message}`));
+    } finally {
+      this._analyzing.delete(buyerWallet);
+    }
+  }
+
+  async run(tokenAddress, useWebsocket = true) {
+    console.log(`\n${chalk.green('Starting monitoring for token:')}`);
+    console.log(`${chalk.white(tokenAddress)}\n`);
+    console.log(`${chalk.yellow(`Mode: ${useWebsocket ? 'WebSocket' : 'Polling'}`)}`);
+    console.log(`${chalk.yellow(`Threshold: ${this.oldThreshold} tokens = OLD wallet`)}`);
+    console.log(`\n${chalk.cyan('Waiting for new transactions...')}\n`);
+
+    this.monitor = new TransactionMonitor({
+      rpcUrl: this.rpcUrl,
+      wssUrl: this.wssUrl,
+      tokenAddress,
+      onTransaction: this.onTransactionDetected.bind(this),
+      pollInterval: this.pollInterval,
+    });
+
+    // Handle graceful shutdown
+    const shutdown = () => {
+      console.log(chalk.yellow('\nReceived shutdown signal...'));
+      this.stop();
+      process.exit(0);
+    };
+    process.on('SIGINT', shutdown);
+    process.on('SIGTERM', shutdown);
+
+    try {
+      await this.monitor.start(useWebsocket);
+    } catch (err) {
+      if (err.message !== 'Monitoring stopped') {
+        console.error(chalk.red(`Monitor error: ${err.message}`));
+      }
+    }
+  }
+
+  stop() {
+    if (this.monitor) this.monitor.stop();
+  }
+}
+
+// ─── Mode 3: Analyze Top Holders ───────────────────────────────────────────
+
+async function analyzeTopHolders(tokenAddress) {
+  const rpcUrl = process.env.SOLANA_RPC_URL || 'https://api.mainnet-beta.solana.com';
+
+  console.log(chalk.yellow('\nHow many top holders to analyze?'));
+  console.log('  Recommended: 15-20 (balanced speed and coverage)');
+  console.log('  ⚠️  Note: Solana RPC typically returns ~20 largest accounts (API limitation)');
+  console.log('  Maximum input: 50, but actual results may be limited by Solana API');
+
+  const holderInput = await ask(chalk.green('\nNumber of holders [default: 20] > '));
+  let holderLimit = parseInt(holderInput, 10);
+  if (isNaN(holderLimit)) holderLimit = 20;
+  holderLimit = Math.max(5, Math.min(50, holderLimit));
+
+  console.log(chalk.cyan(`\n🔍 Analyzing Top ${holderLimit} Token Holders (Enhanced)...\n`));
+
+  const analyzer = new HolderAnalyzer(rpcUrl);
+
+  try {
+    const result = await analyzer.getTokenHolders(tokenAddress, holderLimit);
+    const holders = result.holders || result;  // backward compatible
+    const filteredEntities = result.filteredEntities || [];
+    if (!holders || holders.length === 0) {
+      console.log(chalk.red('No holders found for this token.'));
+      return;
+    }
+
+    // Step 1: Ask user which analyses to run
+    console.log(chalk.yellow('\n📋 Available analysis modes:'));
+    console.log('  [1] Quick    — Risk scoring + Gini + wallet age only');
+    console.log('  [2] Standard — + Trading pattern similarity (Jaccard) + timing correlation');
+    console.log('  [3] Deep     — + Funding chain / sybil detection (most thorough, slower)');
+
+    const analysisMode = await ask(chalk.green('\nAnalysis depth [1/2/3, default: 2] > '));
+    const mode = parseInt(analysisMode, 10) || 2;
+
+    let similarityAnalysis = null;
+    let fundingAnalysis = null;
+
+    // Step 2: Run similarity analysis (mode 2 & 3)
+    if (mode >= 2) {
+      similarityAnalysis = await analyzer.analyzeHolderSimilarities(holders, tokenAddress);
+      if (similarityAnalysis.totalGroups > 0) {
+        console.log(chalk.green(`\n✅ Found ${similarityAnalysis.totalGroups} similarity group(s) (Jaccard method)`));
+      }
+      if (similarityAnalysis.totalTimingClusters > 0) {
+        console.log(chalk.green(`⏱️  Found ${similarityAnalysis.totalTimingClusters} timing cluster(s)`));
+      }
+    }
+
+    // Step 3: Run funding chain analysis (mode 3)
+    if (mode >= 3) {
+      const fundingAna = new FundingAnalyzer(rpcUrl);
+      fundingAnalysis = await fundingAna.analyzeFundingChains(holders);
+      if (fundingAnalysis.totalClusters > 0) {
+        console.log(chalk.green(`💰 Found ${fundingAnalysis.totalClusters} sybil cluster(s)`));
+      }
+      if (fundingAnalysis.totalSnipers > 0) {
+        console.log(chalk.red(`🎯 Found ${fundingAnalysis.totalSnipers} sniper pattern(s)`));
+      }
+    }
+
+    // Format and print full report
+    const output = analyzer.formatHoldersOutput(holders, tokenAddress, similarityAnalysis, fundingAnalysis, filteredEntities);
+    console.log(output);
+
+    // Append funding analysis to output if mode 3
+    let fundingOutput = '';
+    if (fundingAnalysis && mode >= 3) {
+      const fundingAna = new FundingAnalyzer(rpcUrl);
+      fundingOutput = fundingAna.formatFundingOutput(fundingAnalysis, holders);
+      console.log(fundingOutput);
+    }
+
+    // Save to file
+    const save = await ask(chalk.green('\nSave to file? [y/N] > '));
+    if (save.toLowerCase() === 'y') {
+      const filename = `holders_${tokenAddress.slice(0, 8)}_${new Date().toISOString().replace(/[:.T]/g, '').slice(0, 15)}.txt`;
+      writeFileSync(filename, output + fundingOutput, 'utf-8');
+      console.log(chalk.green(`✅ Saved to ${filename}`));
+    }
+  } catch (err) {
+    console.error(chalk.red(`Error analyzing holders: ${err.message}`));
+  }
+}
+
+// ─── Mode 4: Import & Analyze from CSV ─────────────────────────────────────
+
+async function analyzeFromCSV() {
+  const rpcUrl = process.env.SOLANA_RPC_URL || 'https://api.mainnet-beta.solana.com';
+
+  console.log(chalk.cyan('\n📁 IMPORT & ANALYZE FROM CSV'));
+  console.log(chalk.white('='.repeat(60) + '\n'));
+
+  console.log(chalk.yellow('Enter CSV file path:'));
+  console.log('  Example: holders.csv');
+  console.log('  Or full path: /path/to/holders.csv');
+
+  const csvPath = await ask(chalk.green('\nFile path > '));
+  if (!csvPath) {
+    console.log(chalk.red('No file path provided.'));
+    return;
+  }
+
+  // Get token address (optional)
+  console.log(chalk.yellow('\nEnter token address (optional):'));
+  console.log('  This will be used for trading history analysis');
+  const tokenAddress = await ask(chalk.green('\nToken address [press Enter to skip] > ')) || null;
+
+  console.log(chalk.cyan('\n🔍 Importing CSV...\n'));
+
+  const importer = new CSVImporter();
+
+  try {
+    // Validate CSV
+    const validation = importer.validateCSVFormat(csvPath);
+    if (!validation.valid) {
+      console.log(chalk.red('❌ Invalid CSV format'));
+      console.log(validation.error || 'Missing required columns (Address, Balance/Quantity)');
+      return;
+    }
+
+    console.log(chalk.green('✅ CSV format valid'));
+    console.log(`   Rows: ${validation.rowCount}`);
+    console.log(`   Columns: ${validation.headers.slice(0, 5).join(', ')}...`);
+
+    // Parse CSV
+    const data = importer.parseCSV(csvPath, tokenAddress);
+    const holders = data.holders;
+
+    console.log(chalk.green(`\n✅ Successfully imported ${holders.length} holders`));
+    console.log(`   Total balance: ${data.totalBalance.toLocaleString('en-US', { minimumFractionDigits: 2 })} tokens`);
+
+    // Ask for similarity analysis
+    console.log(chalk.yellow('\nPerform trading pattern similarity analysis?'));
+    console.log('  This will fetch trading history for each wallet');
+    console.log('  ⚠️  This may take 5-15 minutes for 100 holders');
+
+    const analyzeSim = await ask(chalk.green('\nAnalyze similarities? [y/N] > '));
+
+    let similarityAnalysis = null;
+    let finalTokenAddress = tokenAddress;
+
+    if (analyzeSim.toLowerCase() === 'y') {
+      if (!finalTokenAddress) {
+        console.log(chalk.yellow('\n⚠️  Token address required for similarity analysis'));
+        finalTokenAddress = await ask(chalk.green('Token address > ')) || null;
+      }
+
+      if (finalTokenAddress) {
+        const analyzer = new HolderAnalyzer(rpcUrl);
+        try {
+          console.log(chalk.cyan('\n🔍 Analyzing trading patterns...'));
+          similarityAnalysis = await analyzer.analyzeHolderSimilarities(holders, finalTokenAddress);
+          if (similarityAnalysis.totalGroups > 0) {
+            console.log(chalk.green(`\n✅ Found ${similarityAnalysis.totalGroups} group(s) with similar trading patterns!`));
+          } else {
+            console.log(chalk.yellow('\nNo significant trading pattern similarities found.'));
+          }
+        } catch (err) {
+          console.error(chalk.red(`\nError in similarity analysis: ${err.message}`));
+        }
+      }
+    }
+
+    // Format and display output with risk scoring
+    console.log(chalk.cyan('\n📊 Generating risk analysis report...\n'));
+
+    const analyzer = new HolderAnalyzer(rpcUrl);
+    const output = analyzer.formatHoldersOutput(holders, finalTokenAddress || 'Unknown', similarityAnalysis);
+    console.log(output);
+
+    // Save to file
+    const save = await ask(chalk.green('\nSave to file? [y/N] > '));
+    if (save.toLowerCase() === 'y') {
+      const filename = `analysis_imported_${new Date().toISOString().replace(/[:.T]/g, '').slice(0, 15)}.txt`;
+      writeFileSync(filename, output, 'utf-8');
+      console.log(chalk.green(`✅ Saved to ${filename}`));
+    }
+  } catch (err) {
+    console.error(chalk.red(`Error: ${err.message}`));
+  }
+}
+
+// ─── Main ───────────────────────────────────────────────────────────────────
+
+async function main() {
+  printBanner();
+
+  console.log(chalk.white('Select operation mode:'));
+  console.log('  1. Monitor Real-time Token Purchases (WebSocket)');
+  console.log('  2. Monitor Real-time Token Purchases (Polling only)');
+  console.log('  3. Deep Token Holder Analysis (Jaccard + Gini + Sybil) 🔥');
+  console.log('  4. Import & Analyze from CSV (Solscan export - supports 100+)');
+
+  const mainMode = await ask(chalk.green('\nSelect Mode [1/2/3/4] > '));
+
+  // Mode 4: CSV import
+  if (mainMode === '4') {
+    await analyzeFromCSV();
+    return;
+  }
+
+  // Get token address (for modes 1, 2, 3)
+  console.log(chalk.white('\nEnter the token address:'));
+  console.log(chalk.cyan('(Example: EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v for USDC)'));
+
+  const tokenAddress = await ask(chalk.green('\nToken Address > '));
+
+  if (!tokenAddress) {
+    console.log(chalk.red('Error: Token address is required.'));
+    process.exit(1);
+  }
+
+  if (!validateSolanaAddress(tokenAddress)) {
+    console.log(chalk.red('Error: Invalid Solana address format.'));
+    process.exit(1);
+  }
+
+  // Mode 3: Analyze top holders
+  if (mainMode === '3') {
+    await analyzeTopHolders(tokenAddress);
+    return;
+  }
+
+  // Mode 1 or 2: Real-time monitoring
+  const useWebsocket = mainMode === '1';
+  const bot = new WalletCheckerBot();
+
+  try {
+    await bot.run(tokenAddress, useWebsocket);
+  } catch (err) {
+    console.error(chalk.red(`Fatal error: ${err.message}`));
+    bot.stop();
+    process.exit(1);
+  }
+}
+
+// Entry point
+main().catch(err => {
+  console.error(chalk.red(`Unhandled error: ${err.message}`));
+  process.exit(1);
+});
