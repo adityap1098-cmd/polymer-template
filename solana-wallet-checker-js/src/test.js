@@ -16,6 +16,7 @@ import {
   EXCHANGE_WALLETS, LIQUIDITY_PROGRAMS, UNIVERSAL_TOKENS,
   identifyExchange, isLiquidityProgram, isUniversalToken, getEntityLabel,
 } from './knownEntities.js';
+import { InsiderDetector } from './insiderDetector.js';
 import { writeFileSync, unlinkSync } from 'fs';
 import { PublicKey } from '@solana/web3.js';
 
@@ -583,5 +584,132 @@ describe('Jaccard excludes universal tokens', () => {
 
     const result = jaccardSimilarity(setA, setB);
     assert.equal(result, 1.0, 'Wallets sharing same real tokens should have Jaccard=1');
+  });
+});
+
+// ─── InsiderDetector Tests ──────────────────────────────────────────────────
+
+describe('InsiderDetector', () => {
+  it('should instantiate correctly', () => {
+    const detector = new InsiderDetector(TEST_RPC);
+    assert.ok(detector);
+  });
+});
+
+describe('InsiderDetector - detectInsiderGroups', () => {
+  it('should group wallets with multiple signals', () => {
+    const detector = new InsiderDetector(TEST_RPC);
+    const holders = [
+      { owner: 'WalletA', balance: 1000, walletAgeDays: 3, tokenCount: 2, tradedTokens: new Set(['tok1', 'tok2']) },
+      { owner: 'WalletB', balance: 800, walletAgeDays: 3, tokenCount: 2, tradedTokens: new Set(['tok1', 'tok2']) },
+      { owner: 'WalletC', balance: 500, walletAgeDays: 30, tokenCount: 10, tradedTokens: new Set(['tok3', 'tok4']) },
+    ];
+
+    const similarity = {
+      groups: [{ wallets: ['WalletA', 'WalletB'], avgJaccard: 0.85, commonTokens: ['tok1', 'tok2'], commonTokenCount: 2, walletCount: 2 }],
+      timingClusters: [{ wallets: ['WalletA', 'WalletB'], spreadSeconds: 30, count: 2 }],
+      totalGroups: 1,
+      totalTimingClusters: 1,
+    };
+
+    const funding = {
+      clusters: [{ wallets: ['WalletA', 'WalletB'], funder: 'FunderX', walletCount: 2, type: 'SHARED_FUNDER' }],
+      totalClusters: 1,
+    };
+
+    const groups = detector.detectInsiderGroups(holders, similarity, funding, []);
+    assert.ok(groups.length >= 1, 'Should detect at least 1 insider group');
+
+    const grp = groups[0];
+    assert.ok(grp.wallets.includes('WalletA'));
+    assert.ok(grp.wallets.includes('WalletB'));
+    assert.ok(grp.confidence >= 45, `Confidence should be >= 45, got ${grp.confidence}`);
+    assert.ok(grp.evidence.tokenOverlap, 'Should have tokenOverlap evidence');
+    assert.ok(grp.evidence.sharedFunder, 'Should have sharedFunder evidence');
+    assert.ok(grp.evidence.timing, 'Should have timing evidence');
+  });
+
+  it('should NOT group unrelated wallets', () => {
+    const detector = new InsiderDetector(TEST_RPC);
+    const holders = [
+      { owner: 'WalletX', balance: 1000, walletAgeDays: 100, tokenCount: 20, tradedTokens: new Set(['a1', 'a2']) },
+      { owner: 'WalletY', balance: 500, walletAgeDays: 200, tokenCount: 15, tradedTokens: new Set(['b1', 'b2']) },
+    ];
+
+    const groups = detector.detectInsiderGroups(holders, { groups: [], timingClusters: [] }, { clusters: [] }, []);
+    assert.equal(groups.length, 0, 'Should detect 0 insider groups for unrelated wallets');
+  });
+
+  it('should detect SOL transfer connections', () => {
+    const detector = new InsiderDetector(TEST_RPC);
+    const holders = [
+      { owner: 'WalletA', balance: 1000, walletAgeDays: 5, tokenCount: 3 },
+      { owner: 'WalletB', balance: 800, walletAgeDays: 5, tokenCount: 3 },
+    ];
+
+    const transfers = [
+      { from: 'WalletA', to: 'WalletB', amountSOL: 1.5, timestamp: new Date(), signature: 'sig1' },
+    ];
+
+    const groups = detector.detectInsiderGroups(holders, { groups: [], timingClusters: [] }, { clusters: [] }, transfers);
+    assert.ok(groups.length >= 1);
+    assert.ok(groups[0].evidence.solTransfer, 'Should have solTransfer evidence');
+    assert.ok(groups[0].confidence >= 20, 'SOL transfer should give >=20 confidence');
+  });
+
+  it('should calculate correct confidence for strong insider group', () => {
+    const detector = new InsiderDetector(TEST_RPC);
+    const holders = [
+      { owner: 'W1', balance: 1000, walletAgeDays: 2, tokenCount: 2 },
+      { owner: 'W2', balance: 900, walletAgeDays: 2, tokenCount: 2 },
+      { owner: 'W3', balance: 800, walletAgeDays: 2, tokenCount: 2 },
+    ];
+
+    const similarity = {
+      groups: [{ wallets: ['W1', 'W2', 'W3'], avgJaccard: 0.9, commonTokens: ['t1'], commonTokenCount: 1, walletCount: 3 }],
+      timingClusters: [{ wallets: ['W1', 'W2', 'W3'], spreadSeconds: 10, count: 3 }],
+    };
+    const funding = {
+      clusters: [{ wallets: ['W1', 'W2', 'W3'], funder: 'F1', walletCount: 3, type: 'SHARED_FUNDER' }],
+    };
+    const transfers = [{ from: 'W1', to: 'W2', amountSOL: 2, timestamp: new Date(), signature: 's1' }];
+
+    const groups = detector.detectInsiderGroups(holders, similarity, funding, transfers);
+    assert.ok(groups[0].confidence >= 70, `Strong insider group should have confidence >=70, got ${groups[0].confidence}`);
+    assert.ok(groups[0].confidenceLabel.includes('SANGAT MUNGKIN'));
+  });
+});
+
+describe('InsiderDetector - formatInsiderOutput', () => {
+  it('should format output with group details', () => {
+    const detector = new InsiderDetector(TEST_RPC);
+    const holders = [
+      { owner: 'WalletA', balance: 1000, walletAgeDays: 3, tokenCount: 2, riskData: { score: 60 } },
+      { owner: 'WalletB', balance: 800, walletAgeDays: 3, tokenCount: 2, riskData: { score: 55 } },
+    ];
+
+    const groups = [{
+      wallets: ['WalletA', 'WalletB'],
+      walletCount: 2,
+      confidence: 75,
+      confidenceLabel: '🔴 SANGAT MUNGKIN INSIDER/TEAM',
+      signals: ['🔴 Token overlap sangat tinggi (J=0.85) — 35pts', '💰 Didanai dari sumber yang sama — 25pts'],
+      evidence: { tokenOverlap: true, sharedFunder: true, timing: false, solTransfer: false, sharedTokens: new Set(['tok1']), funders: new Set(['FunderX']), transfers: [] },
+      supplyPct: 60.5,
+      groupBalance: 1800,
+    }];
+
+    const output = detector.formatInsiderOutput(groups, holders, null);
+    assert.ok(output.includes('SUSPECTED INSIDER'), 'Should have insider header');
+    assert.ok(output.includes('SANGAT MUNGKIN'), 'Should have confidence label');
+    assert.ok(output.includes('WalletA'), 'Should list member wallets');
+    assert.ok(output.includes('TOKEN YANG SAMA'), 'Should show shared tokens');
+    assert.ok(output.includes('FunderX'), 'Should show funder');
+  });
+
+  it('should show no groups message when empty', () => {
+    const detector = new InsiderDetector(TEST_RPC);
+    const output = detector.formatInsiderOutput([], [], null);
+    assert.ok(output.includes('Tidak ditemukan'));
   });
 });

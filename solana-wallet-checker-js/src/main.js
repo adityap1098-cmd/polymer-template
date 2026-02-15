@@ -26,6 +26,7 @@ import { WalletAnalyzer, WalletType, WalletProfile } from './walletAnalyzer.js';
 import { TransactionMonitor } from './transactionMonitor.js';
 import { HolderAnalyzer } from './holderAnalyzer.js';
 import { FundingAnalyzer } from './fundingAnalyzer.js';
+import { InsiderDetector } from './insiderDetector.js';
 import { CSVImporter } from './csvImporter.js';
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
@@ -72,13 +73,14 @@ function validateSolanaAddress(address) {
 function printBanner() {
   console.log(chalk.cyan(`
 ╔══════════════════════════════════════════════════════════════╗
-║          🔍 SOLANA WALLET CHECKER BOT v2.0 🔍                 ║
+║          🔍 SOLANA WALLET CHECKER BOT v2.1 🔍                 ║
 ║            Node.js + @solana/web3.js edition                   ║
 ║                                                                ║
 ║  Enhanced Analysis:                                            ║
 ║  • Jaccard Similarity · Gini Coefficient                       ║
 ║  • Funding Chain / Sybil Detection                             ║
-║  • Buy-Timing Correlation · Bot Detection                      ║
+║  • 🕵️  Insider/Team Detection (multi-signal)                   ║
+║  • Inter-holder Transfer · Buy-Timing Correlation              ║
 ╚══════════════════════════════════════════════════════════════╝
 `));
 }
@@ -232,13 +234,14 @@ async function analyzeTopHolders(tokenAddress) {
     console.log(chalk.yellow('\n📋 Available analysis modes:'));
     console.log('  [1] Quick    — Risk scoring + Gini + wallet age only');
     console.log('  [2] Standard — + Trading pattern similarity (Jaccard) + timing correlation');
-    console.log('  [3] Deep     — + Funding chain / sybil detection (most thorough, slower)');
+    console.log('  [3] Deep     — + Funding chain + sybil + insider/team detection (RECOMMENDED)');
 
-    const analysisMode = await ask(chalk.green('\nAnalysis depth [1/2/3, default: 2] > '));
-    const mode = parseInt(analysisMode, 10) || 2;
+    const analysisMode = await ask(chalk.green('\nAnalysis depth [1/2/3, default: 3] > '));
+    const mode = parseInt(analysisMode, 10) || 3;
 
     let similarityAnalysis = null;
     let fundingAnalysis = null;
+    let insiderGroups = [];
 
     // Step 2: Run similarity analysis (mode 2 & 3)
     if (mode >= 2) {
@@ -261,11 +264,31 @@ async function analyzeTopHolders(tokenAddress) {
       if (fundingAnalysis.totalSnipers > 0) {
         console.log(chalk.red(`🎯 Found ${fundingAnalysis.totalSnipers} sniper pattern(s)`));
       }
+
+      // Step 4: Insider/Team Detection — combines ALL signals
+      const insiderDetector = new InsiderDetector(rpcUrl);
+      console.log(chalk.cyan('\n🕵️  Running insider/team detection...'));
+      const interHolderTransfers = await insiderDetector.detectInterHolderTransfers(holders);
+      insiderGroups = insiderDetector.detectInsiderGroups(
+        holders, similarityAnalysis, fundingAnalysis, interHolderTransfers,
+      );
+      if (insiderGroups.length > 0) {
+        const highConf = insiderGroups.filter(g => g.confidence >= 45).length;
+        console.log(chalk.red(`\n🕵️  Detected ${insiderGroups.length} suspected insider group(s)${highConf > 0 ? ` (${highConf} high confidence!)` : ''}`));
+      }
     }
 
     // Format and print full report
     const output = analyzer.formatHoldersOutput(holders, tokenAddress, similarityAnalysis, fundingAnalysis, filteredEntities);
     console.log(output);
+
+    // Append insider groups
+    let insiderOutput = '';
+    if (insiderGroups.length > 0 && mode >= 3) {
+      const insiderDetector = new InsiderDetector(rpcUrl);
+      insiderOutput = insiderDetector.formatInsiderOutput(insiderGroups, holders, fundingAnalysis);
+      console.log(insiderOutput);
+    }
 
     // Append funding analysis to output if mode 3
     let fundingOutput = '';
@@ -279,7 +302,7 @@ async function analyzeTopHolders(tokenAddress) {
     const save = await ask(chalk.green('\nSave to file? [y/N] > '));
     if (save.toLowerCase() === 'y') {
       const filename = `holders_${tokenAddress.slice(0, 8)}_${new Date().toISOString().replace(/[:.T]/g, '').slice(0, 15)}.txt`;
-      writeFileSync(filename, output + fundingOutput, 'utf-8');
+      writeFileSync(filename, output + insiderOutput + fundingOutput, 'utf-8');
       console.log(chalk.green(`✅ Saved to ${filename}`));
     }
   } catch (err) {
