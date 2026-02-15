@@ -12,7 +12,7 @@
  */
 
 import { RateLimitedRPC } from './rateLimiter.js';
-import { isUniversalToken, getEntityLabel } from './knownEntities.js';
+import { isUniversalToken, getEntityLabel, identifyExchange, isLiquidityProgram } from './knownEntities.js';
 
 const TOKEN_PROGRAM_ID = 'TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA';
 
@@ -148,8 +148,14 @@ export class InsiderDetector {
     }
 
     // Signal 2: Sybil clusters (shared funders)
+    // SKIP if funder is a known entity (exchange, bot, DEX) — those are customers, not insiders
     if (fundingAnalysis?.clusters) {
       for (const cluster of fundingAnalysis.clusters) {
+        const funder = cluster.funder;
+        if (funder && funder !== 'INTERNAL') {
+          const isKnown = identifyExchange(funder).isExchange || isLiquidityProgram(funder);
+          if (isKnown) continue; // skip — funded by exchange/bot/DEX
+        }
         for (let i = 0; i < cluster.wallets.length; i++) {
           for (let j = i + 1; j < cluster.wallets.length; j++) {
             addConnection(cluster.wallets[i], cluster.wallets[j], 'SHARED_FUNDER', {

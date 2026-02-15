@@ -713,3 +713,68 @@ describe('InsiderDetector - formatInsiderOutput', () => {
     assert.ok(output.includes('Tidak ditemukan'));
   });
 });
+
+describe('InsiderDetector - skip known entity funders', () => {
+  it('should NOT flag wallets funded by known exchange as insider', () => {
+    const detector = new InsiderDetector(TEST_RPC);
+    const holders = [
+      { owner: 'WalletA', balance: 1000, walletAgeDays: 5, tokenCount: 3 },
+      { owner: 'WalletB', balance: 800, walletAgeDays: 5, tokenCount: 3 },
+    ];
+
+    // Funder is Binance (known exchange in EXCHANGE_WALLETS)
+    const funding = {
+      clusters: [{
+        wallets: ['WalletA', 'WalletB'],
+        funder: '5tzFkiKscXHK5ZXCGbXZxdw7gTjjD1mBwuoFbhUvuAi9', // Binance
+        walletCount: 2,
+        type: 'SHARED_FUNDER',
+      }],
+    };
+
+    const groups = detector.detectInsiderGroups(holders, { groups: [], timingClusters: [] }, funding, []);
+    assert.equal(groups.length, 0, 'Should NOT create insider group for exchange-funded wallets');
+  });
+
+  it('should NOT flag wallets funded by known bot as insider', () => {
+    const detector = new InsiderDetector(TEST_RPC);
+    const holders = [
+      { owner: 'WalletX', balance: 500, walletAgeDays: 10, tokenCount: 5 },
+      { owner: 'WalletY', balance: 400, walletAgeDays: 10, tokenCount: 5 },
+    ];
+
+    // Funder is Sniper MEV Bot (known in EXCHANGE_WALLETS)
+    const funding = {
+      clusters: [{
+        wallets: ['WalletX', 'WalletY'],
+        funder: 'po27vzv7pSZYsroDopmGVVBVAqxg4GcyZXxmCkoejFB', // 🤖 Sniper MEV Bot
+        walletCount: 2,
+        type: 'SHARED_FUNDER',
+      }],
+    };
+
+    const groups = detector.detectInsiderGroups(holders, { groups: [], timingClusters: [] }, funding, []);
+    assert.equal(groups.length, 0, 'Should NOT create insider group for bot-funded wallets');
+  });
+
+  it('should still flag UNKNOWN shared funders as insider', () => {
+    const detector = new InsiderDetector(TEST_RPC);
+    const holders = [
+      { owner: 'WalletA', balance: 1000, walletAgeDays: 5, tokenCount: 3 },
+      { owner: 'WalletB', balance: 800, walletAgeDays: 5, tokenCount: 3 },
+    ];
+
+    const funding = {
+      clusters: [{
+        wallets: ['WalletA', 'WalletB'],
+        funder: 'SomeUnknownFunderWallet123456789012345678901234',
+        walletCount: 2,
+        type: 'SHARED_FUNDER',
+      }],
+    };
+
+    const groups = detector.detectInsiderGroups(holders, { groups: [], timingClusters: [] }, funding, []);
+    assert.ok(groups.length >= 1, 'Should flag unknown shared funder as insider');
+    assert.ok(groups[0].evidence.sharedFunder);
+  });
+});
