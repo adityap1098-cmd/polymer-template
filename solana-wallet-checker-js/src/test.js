@@ -587,6 +587,45 @@ describe('Jaccard excludes universal tokens', () => {
   });
 });
 
+// ─── Jaccard Threshold Tests ────────────────────────────────────────────────
+
+describe('Jaccard dual threshold', () => {
+  it('should match with Jaccard >= 0.10 AND 3+ common tokens', () => {
+    // 20 tokens each, 4 shared → J = 4/(20+20-4)=4/36≈0.111 >= 0.10 ✓, count=4 >= 3 ✓
+    const shared = ['T1', 'T2', 'T3', 'T4'];
+    const a = new Set([...shared, ...Array.from({ length: 16 }, (_, i) => `A${i}`)]);
+    const b = new Set([...shared, ...Array.from({ length: 16 }, (_, i) => `B${i}`)]);
+    const j = jaccardSimilarity(a, b);
+    const common = [...a].filter(t => b.has(t));
+    assert.ok(j >= 0.10, `Jaccard ${j} should be >= 0.10`);
+    assert.ok(common.length >= 3, `Common count ${common.length} should be >= 3`);
+  });
+
+  it('should match with 5+ common tokens even if Jaccard < 0.10', () => {
+    // Large portfolios: 100 each, 6 shared → J = 6/194 ≈ 0.031 < 0.10, but count=6 >= 5
+    const shared = ['T1', 'T2', 'T3', 'T4', 'T5', 'T6'];
+    const a = new Set([...shared, ...Array.from({ length: 94 }, (_, i) => `A${i}`)]);
+    const b = new Set([...shared, ...Array.from({ length: 94 }, (_, i) => `B${i}`)]);
+    const j = jaccardSimilarity(a, b);
+    const common = [...a].filter(t => b.has(t));
+    assert.ok(j < 0.10, `Jaccard ${j} should be < 0.10 (large portfolios)`);
+    assert.ok(common.length >= 5, `Common count ${common.length} should be >= 5`);
+    // This pair should STILL be flagged by the raw count criterion
+    assert.ok((j >= 0.10 && common.length >= 3) || common.length >= 5, 'Dual threshold should catch this');
+  });
+
+  it('should NOT match with Jaccard < 0.10 AND < 5 common tokens', () => {
+    // 80 each, 3 shared → J = 3/157 ≈ 0.019 < 0.10, count=3 < 5
+    const shared = ['T1', 'T2', 'T3'];
+    const a = new Set([...shared, ...Array.from({ length: 77 }, (_, i) => `A${i}`)]);
+    const b = new Set([...shared, ...Array.from({ length: 77 }, (_, i) => `B${i}`)]);
+    const j = jaccardSimilarity(a, b);
+    const common = [...a].filter(t => b.has(t));
+    const passes = (j >= 0.10 && common.length >= 3) || common.length >= 5;
+    assert.ok(!passes, 'Dual threshold should reject low overlap in large portfolios');
+  });
+});
+
 // ─── InsiderDetector Tests ──────────────────────────────────────────────────
 
 describe('InsiderDetector', () => {

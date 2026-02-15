@@ -171,10 +171,15 @@ export class HolderAnalyzer {
         topHolders[i].txFrequency = walletAge.txPerDay;
         topHolders[i].totalTxCount = walletAge.totalTx;
 
-        // Token holdings — direct query via getTokenAccountsByOwner (accurate!)
+        // Token holdings — combine CURRENT accounts + HISTORICAL tx scan
+        // getTokenAccountsByOwner misses closed accounts (sold tokens)!
+        // Must scan tx history to find ALL tokens ever traded.
         const tokenData = await this._getWalletTokenAccounts(topHolders[i].owner, tokenMint);
-        topHolders[i].tradedTokens = tokenData.allTokens;
-        topHolders[i].tokenCount = tokenData.tokenCount;
+        const historicalTokens = await this._getWalletTokenHistory(topHolders[i].owner, tokenMint, 50);
+        const combinedTokens = new Set([...tokenData.allTokens, ...historicalTokens]);
+        topHolders[i].tradedTokens = combinedTokens;
+        topHolders[i].tokenCount = tokenData.tokenCount; // actual currently-held count
+        topHolders[i].historicalTokenCount = combinedTokens.size; // total for Jaccard
       } catch {
         topHolders[i].purchaseTime = null;
         topHolders[i].purchaseTimeStr = 'Unknown';
@@ -183,9 +188,12 @@ export class HolderAnalyzer {
         topHolders[i].totalTxCount = 0;
         topHolders[i].tradedTokens = new Set();
         topHolders[i].tokenCount = 0;
+        topHolders[i].historicalTokenCount = 0;
       }
       if ((i + 1) % 3 === 0 || i === topHolders.length - 1) {
-        console.log(`  Holder info: ${i + 1}/${topHolders.length} | ${topHolders[i].owner.slice(0, 12)}... age=${topHolders[i].walletAgeDays}d tokens=${topHolders[i].tokenCount}`);
+        const curr = topHolders[i].tokenCount || 0;
+        const hist = topHolders[i].historicalTokenCount || 0;
+        console.log(`  Holder info: ${i + 1}/${topHolders.length} | ${topHolders[i].owner.slice(0, 12)}... age=${topHolders[i].walletAgeDays}d tokens=${hist} (${curr} held + ${hist - curr} history)`);
       }
     }
 
@@ -287,41 +295,47 @@ export class HolderAnalyzer {
     return { allTokens, heldTokens, tokenCount: heldTokens.size };
   }
 
-  // ─── Token Trading History (Fallback) ───────────────────────────────────
+  // ─── Token Trading History (Deep Scan) ──────────────────────────────────
 
   /**
-   * Get list of tokens traded by a wallet from tx history.
-   * Used as fallback when getTokenAccountsByOwner returns empty.
+   * Get ALL tokens a wallet has interacted with from transaction history.
+   * CRITICAL: getTokenAccountsByOwner misses closed accounts (sold tokens).
+   * This scans recent N transactions to find every token mint the wallet touched.
+   * Combined with getTokenAccountsByOwner, gives a COMPLETE token profile.
+   *
+   * @param {string} wallet
+   * @param {string} excludeToken — the token being analyzed
+   * @param {number} limit — number of recent txs to scan (default: 50)
+   * @returns {Promise<Set<string>>}
    */
-  async _getWalletTokenHistory(wallet, excludeToken = null, limit = 20) {
+  async _getWalletTokenHistory(wallet, excludeToken = null, limit = 50) {
     const tokens = new Set();
 
     try {
       const signatures = await this.rpc.call('getSignaturesForAddress', [wallet, { limit }]);
       if (!signatures || !Array.isArray(signatures)) return tokens;
 
-      for (const sigInfo of signatures.slice(0, limit)) {
-        const signature = sigInfo.signature;
-        if (!signature) continue;
+      for (const sigInfo of signatures) {
+        if (!sigInfo.signature) continue;
 
         try {
           const tx = await this.rpc.call('getTransaction', [
-            signature, { encoding: 'jsonParsed', maxSupportedTransactionVersion: 0 },
+            sigInfo.signature,
+            { encoding: 'jsonParsed', maxSupportedTransactionVersion: 0 },
           ]);
-          if (!tx || !tx.meta) continue;
+          if (!tx?.meta) continue;
 
-          const allBalances = [
-            ...(tx.meta.preTokenBalances || []),
-            ...(tx.meta.postTokenBalances || []),
-          ];
-          for (const balance of allBalances) {
-            if (balance.mint && balance.owner === wallet && balance.mint !== excludeToken) {
-              if (!isUniversalToken(balance.mint)) {
-                tokens.add(balance.mint);
+          // Extract from preTokenBalances + postTokenBalances (most reliable)
+          for (const balances of [tx.meta.preTokenBalances, tx.meta.postTokenBalances]) {
+            if (!balances) continue;
+            for (const b of balances) {
+              if (b.mint && b.owner === wallet && b.mint !== excludeToken && !isUniversalToken(b.mint)) {
+                tokens.add(b.mint);
               }
             }
           }
 
+          // Also check inner instructions for additional mints
           for (const innerGroup of (tx.meta.innerInstructions || [])) {
             for (const inst of (innerGroup.instructions || [])) {
               const programId = inst.programId?.toString?.() || inst.programId;
@@ -332,6 +346,9 @@ export class HolderAnalyzer {
             }
           }
         } catch { continue; }
+
+        // Early stop: found enough tokens for meaningful Jaccard comparison
+        if (tokens.size >= 50) break;
       }
     } catch { /* empty */ }
 
@@ -416,25 +433,19 @@ export class HolderAnalyzer {
         cachedCount++;
         console.log(`   [${i + 1}/${holders.length}] ${holders[i].owner.slice(0, 12)}... → ${holders[i].tradedTokens.size} tokens (cached)`);
       } else {
-        // Fallback: fetch via getTokenAccountsByOwner
+        // Fallback: combined current + historical
         try {
           const tokenData = await this._getWalletTokenAccounts(holders[i].owner, currentToken);
-          holders[i].tradedTokens = tokenData.allTokens;
+          const historical = await this._getWalletTokenHistory(holders[i].owner, currentToken, 50);
+          holders[i].tradedTokens = new Set([...tokenData.allTokens, ...historical]);
           holders[i].tokenCount = tokenData.tokenCount;
+          holders[i].historicalTokenCount = holders[i].tradedTokens.size;
           fetchedCount++;
         } catch {
-          // Last resort: tx history scan
-          try {
-            const tokens = await this._getWalletTokenHistory(holders[i].owner, currentToken);
-            holders[i].tradedTokens = tokens;
-            holders[i].tokenCount = tokens.size;
-            fetchedCount++;
-          } catch {
-            holders[i].tradedTokens = new Set();
-            holders[i].tokenCount = 0;
-          }
+          holders[i].tradedTokens = new Set();
+          holders[i].tokenCount = 0;
         }
-        console.log(`   [${i + 1}/${holders.length}] ${holders[i].owner.slice(0, 12)}... → ${holders[i].tokenCount} tokens`);
+        console.log(`   [${i + 1}/${holders.length}] ${holders[i].owner.slice(0, 12)}... → ${holders[i].tradedTokens.size} tokens (fetched)`);
       }
     }
 
@@ -454,8 +465,10 @@ export class HolderAnalyzer {
         const jaccard = jaccardSimilarity(tokens1, tokens2);
         const commonTokens = new Set([...tokens1].filter(t => tokens2.has(t)));
 
-        // Jaccard ≥ 0.15 is considered notable (calibrated threshold)
-        if (jaccard >= 0.15 && commonTokens.size >= 2) {
+        // Dual threshold: proportional (Jaccard) OR absolute (raw count)
+        // Jaccard ≥ 0.10 with 3+ common = proportional overlap
+        // 5+ common tokens = always notable (even with large portfolios)
+        if ((jaccard >= 0.10 && commonTokens.size >= 3) || commonTokens.size >= 5) {
           const key = [holders[i].owner, holders[j].owner].sort().join('|');
           similarities.set(key, {
             wallets: [holders[i].owner, holders[j].owner],
@@ -966,12 +979,13 @@ export class HolderAnalyzer {
         detailCount++;
         const age = holder.walletAgeDays !== null && holder.walletAgeDays !== undefined
           ? `${holder.walletAgeDays}d` : '?';
-        const tokenNote = (holder.tokenCount || 0) === 0 && holder.tradedTokens ? ' (excl. universal)' : '';
+        const totalTokens = holder.historicalTokenCount || holder.tokenCount || 0;
+        const heldTokens = holder.tokenCount || 0;
 
         lines.push('');
         lines.push(`  #${String(detailCount).padStart(2)} ${risk.level} — Score: ${risk.score}/100`);
         lines.push(`  ${holder.owner}`);
-        lines.push(`  ${holder.balance.toLocaleString('en-US', { maximumFractionDigits: 0 })} tokens (${percentage.toFixed(2)}%) | Age: ${age} | Tokens: ${holder.tokenCount || 0}${tokenNote}`);
+        lines.push(`  ${holder.balance.toLocaleString('en-US', { maximumFractionDigits: 0 })} tokens (${percentage.toFixed(2)}%) | Age: ${age} | Tokens: ${totalTokens} (${heldTokens} held)`);
         if (holder.purchaseTimeStr && holder.purchaseTimeStr !== 'Unknown') {
           lines.push(`  First Buy: ${holder.purchaseTimeStr}`);
         }
@@ -994,10 +1008,10 @@ export class HolderAnalyzer {
         const pct = totalBalance > 0 ? (holder.balance / totalBalance * 100).toFixed(1) : '0';
         const age = holder.walletAgeDays !== null && holder.walletAgeDays !== undefined
           ? `${holder.walletAgeDays}d`.padEnd(4) : '?   ';
-        const tokenNote = (holder.tokenCount || 0) === 0 && holder.tradedTokens ? '*' : '';
-        lines.push(`  ${String(holder.riskData.score).padStart(5)} | ${pct.padStart(6)}% | ${age} | ${String((holder.tokenCount || 0)).padStart(5)}${tokenNote} | ${holder.owner}`);
+        const totalTokens = holder.historicalTokenCount || holder.tokenCount || 0;
+        lines.push(`  ${String(holder.riskData.score).padStart(5)} | ${pct.padStart(6)}% | ${age} | ${String(totalTokens).padStart(5)} | ${holder.owner}`);
       }
-      lines.push('  (* = token count excludes universal tokens like wSOL/USDC)');
+      lines.push('  (Token count = total unique tokens ever traded, excl. universal)');
     }
 
     lines.push('');
