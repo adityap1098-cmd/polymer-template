@@ -49,6 +49,9 @@ export const EXCHANGE_WALLETS = new Map([
   // Raydium Authority (not a person)
   ['5Q544fKrFoe6tsEbD7S8EmxGTJYAKtTVhAW5Q5pge4j1', 'Raydium Authority'],
 
+  // ChangeNow
+  ['G2YxRa6wt1qePMwfJzdXZG62ej4qaTC7YURzuh2Lwd3t', 'ChangeNow'],
+
   // Known Bots / Volume Bots / MEV
   ['5Z84wihCtpNP9W58KoExJ5e9CG4SP2QUUg6tsnXb9WGF', '⚡ BoostLegends VolumeBot'],
   ['po27vzv7pSZYsroDopmGVVBVAqxg4GcyZXxmCkoejFB', '🤖 Sniper MEV Bot'],
