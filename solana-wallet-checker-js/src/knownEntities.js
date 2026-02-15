@@ -48,6 +48,9 @@ export const EXCHANGE_WALLETS = new Map([
 
   // Raydium Authority (not a person)
   ['5Q544fKrFoe6tsEbD7S8EmxGTJYAKtTVhAW5Q5pge4j1', 'Raydium Authority'],
+
+  // Known Bots / Volume Bots
+  ['5Z84wihCtpNP9W58KoExJ5e9CG4SP2QUUg6tsnXb9WGF', '⚡ BoostLegends VolumeBot'],
 ]);
 
 // ─── KNOWN DEX / LIQUIDITY / PROGRAM WALLETS ───────────────────────────────
