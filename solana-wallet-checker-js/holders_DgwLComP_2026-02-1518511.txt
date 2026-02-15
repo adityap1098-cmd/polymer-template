@@ -1,0 +1,318 @@
+
+╔══════════════════════════════════════════════════════════════════════════════╗
+║  TOKEN HOLDER RISK ANALYSIS — ENHANCED                                      ║
+║  Jaccard Similarity · Gini Index · Timing Correlation · Funding Chain        ║
+╚══════════════════════════════════════════════════════════════════════════════╝
+  Token: DgwLComP2mnzoc84XwyAin37Rk7LmrkPeFeR6jXTpump
+  Holders Analyzed: 20
+
+┌──────────────────────────────────────────────────────────────────────────────┐
+│  📊 TOKEN HEALTH OVERVIEW                                                    │
+├──────────────────────────────────────────────────────────────────────────────┤
+│  Overall Risk:          🟡 MODERATE RISK (Score: 55/100)
+│  Gini Coefficient:      0.468 (moderate concentration)
+│  Top 5 Concentration:   60.13%
+│  Top 10 Concentration:  77.83%
+│  Avg Wallet Age:        1 days
+│  Fresh Wallets (≤7d):   20/20 (100%)
+│  Timing Clusters:       0 cluster(s), 0 wallets
+│  Sybil Clusters:        3 cluster(s), 6 wallets
+└──────────────────────────────────────────────────────────────────────────────┘
+
+📊 HOLDER RISK DISTRIBUTION:
+   🔴 Critical: 0  🟠 High: 3  🟡 Medium: 8  🟢 Low: 9
+
+════════════════════════════════════════════════════════════════════════════════
+
+# 1 🟠 HIGH (Score: 60/100) ────────────────────
+    Significant risk indicators present
+    Wallet:         2DxxYabaeF2eCi2duW9EA9QNr1UjAPqyMXrWmYW7ZxSD
+    Balance:        218,562,612.155865 tokens (40.93%)
+    First Purchase: 2026-02-15 18:47:23
+    Wallet Age:     1d | Activity: 50 tx/day | Tokens Traded: 0 (excl. universal)
+    Risk Factors:
+       • ❌ No trading history (15pts)
+       • 🐋 Whale: 40.93% of supply (20pts)
+       • 🆕 Brand new wallet: 1 day(s) old (15pts)
+       • 🔍 Whale with no trading history (10pts)
+
+# 2 🟠 HIGH (Score: 55/100) ────────────────────
+    Significant risk indicators present
+    Wallet:         6ZiWEdfo6Yd75q33Qk6MSvYPnVtjMnyjJ5xDYghB9hjk
+    Balance:        11,048,811.038870 tokens (2.07%)
+    First Purchase: 2026-02-15 17:11:13
+    Wallet Age:     1d | Activity: 50 tx/day | Tokens Traded: 0 (excl. universal)
+    Risk Factors:
+       • ❌ No trading history (15pts)
+       • 📈 Notable holder: 2.07% (7pts)
+       • 🆕 Brand new wallet: 1 day(s) old (15pts)
+       • 💰 Same funder as 1 other holder(s) (8pts)
+       • 🔍 Whale with no trading history (10pts)
+
+# 3 🟠 HIGH (Score: 52/100) ────────────────────
+    Significant risk indicators present
+    Wallet:         HqkhPu4kh2QraxmGQMZNoeznBVGVf36LGTicvjHA6W44
+    Balance:        24,872,614.365041 tokens (4.66%)
+    First Purchase: 2026-02-15 17:54:30
+    Wallet Age:     1d | Activity: 50 tx/day | Tokens Traded: 1
+    Risk Factors:
+       • ⚠️  Very low diversity: 1 tokens (12pts)
+       • 📈 Notable holder: 4.66% (7pts)
+       • 🆕 Brand new wallet: 1 day(s) old (15pts)
+       • 💰 Same funder as 1 other holder(s) (8pts)
+       • 🔍 Whale with no trading history (10pts)
+
+# 4 🟡 MEDIUM (Score: 44/100) ────────────────────
+    Some risk factors detected
+    Wallet:         AfENtt3nevWbkv1TdMwvwSiJ9rEZys5CSor76kictnQo
+    Balance:        25,558,074.282854 tokens (4.79%)
+    First Purchase: 2026-02-15 17:23:31
+    Wallet Age:     1d | Activity: 50 tx/day | Tokens Traded: 1
+    Risk Factors:
+       • ⚠️  Very low diversity: 1 tokens (12pts)
+       • 📈 Notable holder: 4.79% (7pts)
+       • 🆕 Brand new wallet: 1 day(s) old (15pts)
+       • 🔍 Whale with no trading history (10pts)
+
+# 5 🟡 MEDIUM (Score: 44/100) ────────────────────
+    Some risk factors detected
+    Wallet:         4EofPVY7voKY6H58GBh9gmngQHVbBe1dXMMNF873Yx2E
+    Balance:        13,359,954.770188 tokens (2.50%)
+    First Purchase: Unknown
+    Wallet Age:     1d | Activity: 50 tx/day | Tokens Traded: 1
+    Risk Factors:
+       • ⚠️  Very low diversity: 1 tokens (12pts)
+       • 📈 Notable holder: 2.50% (7pts)
+       • 🆕 Brand new wallet: 1 day(s) old (15pts)
+       • 🔍 Whale with no trading history (10pts)
+
+# 6 🟡 MEDIUM (Score: 44/100) ────────────────────
+    Some risk factors detected
+    Wallet:         BQFZr96tTu7SrnrDdLGCMAnWLqtaoBgzcBKm3cudmJJj
+    Balance:        12,453,696.368296 tokens (2.33%)
+    First Purchase: Unknown
+    Wallet Age:     1d | Activity: 50 tx/day | Tokens Traded: 1
+    Risk Factors:
+       • ⚠️  Very low diversity: 1 tokens (12pts)
+       • 📈 Notable holder: 2.33% (7pts)
+       • 🆕 Brand new wallet: 1 day(s) old (15pts)
+       • 🔍 Whale with no trading history (10pts)
+
+# 7 🟡 MEDIUM (Score: 40/100) ────────────────────
+    Some risk factors detected
+    Wallet:         7dJKcmGHdcLFTgbEXFuLYaEnGdX3Rr78yFedXccof5NV
+    Balance:        10,358,519.701636 tokens (1.94%)
+    First Purchase: Unknown
+    Wallet Age:     1d | Activity: 45 tx/day | Tokens Traded: 0 (excl. universal)
+    Risk Factors:
+       • ❌ No trading history (15pts)
+       • 🆕 Brand new wallet: 1 day(s) old (15pts)
+       • 🔍 Whale with no trading history (10pts)
+
+# 8 🟡 MEDIUM (Score: 34/100) ────────────────────
+    Some risk factors detected
+    Wallet:         4vKMT621kJ3unxGjGQnXJgCGxdxqFd2Zn5xQMUX8ueV3
+    Balance:        25,739,552.375203 tokens (4.82%)
+    First Purchase: Unknown
+    Wallet Age:     1d | Activity: 50 tx/day | Tokens Traded: 2
+    Risk Factors:
+       • ⚠️  Very low diversity: 2 tokens (12pts)
+       • 📈 Notable holder: 4.82% (7pts)
+       • 🆕 Brand new wallet: 1 day(s) old (15pts)
+
+# 9 🟡 MEDIUM (Score: 34/100) ────────────────────
+    Some risk factors detected
+    Wallet:         BQfmhDrKF9NUPi96CkMhHCk5FRYd5uucoWLmUky3iFvn
+    Balance:        12,913,431.703215 tokens (2.42%)
+    First Purchase: Unknown
+    Wallet Age:     1d | Activity: 50 tx/day | Tokens Traded: 2
+    Risk Factors:
+       • ⚠️  Very low diversity: 2 tokens (12pts)
+       • 📈 Notable holder: 2.42% (7pts)
+       • 🆕 Brand new wallet: 1 day(s) old (15pts)
+
+#10 🟡 MEDIUM (Score: 34/100) ────────────────────
+    Some risk factors detected
+    Wallet:         5nmD8azDM83qti3F5fECVTDdQaoMf89ySRYYp5cFgjP9
+    Balance:        11,016,214.571843 tokens (2.06%)
+    First Purchase: Unknown
+    Wallet Age:     1d | Activity: 50 tx/day | Tokens Traded: 2
+    Risk Factors:
+       • ⚠️  Very low diversity: 2 tokens (12pts)
+       • 📈 Notable holder: 2.06% (7pts)
+       • 🆕 Brand new wallet: 1 day(s) old (15pts)
+
+#11 🟡 MEDIUM (Score: 31/100) ────────────────────
+    Some risk factors detected
+    Wallet:         5XfVNdcNQkNg9v3UoqqWiHpbYUfqvsBHxiacWLfJKtw4
+    Balance:        11,137,107.373196 tokens (2.09%)
+    First Purchase: Unknown
+    Wallet Age:     2d | Activity: 30.32 tx/day | Tokens Traded: 4
+    Risk Factors:
+       • 📊 Limited diversity: 4 tokens (6pts)
+       • 📈 Notable holder: 2.09% (7pts)
+       • 📅 Very young wallet: 2 days old (10pts)
+       • 💰 Same funder as 1 other holder(s) (8pts)
+
+#12 🟢 LOW (Score: 29/100) ────────────────────
+    Normal holder behavior
+    Wallet:         F3m3PTMiFrLsDW4p9tWLGMqcmrDoyzKDT62vATmdX2m5
+    Balance:        24,667,886.361020 tokens (4.62%)
+    First Purchase: Unknown
+    Wallet Age:     6d | Activity: 8.42 tx/day | Tokens Traded: 2
+    Risk Factors:
+       • ⚠️  Very low diversity: 2 tokens (12pts)
+       • 📈 Notable holder: 4.62% (7pts)
+       • 📅 Very young wallet: 6 days old (10pts)
+
+#13 🟢 LOW (Score: 29/100) ────────────────────
+    Normal holder behavior
+    Wallet:         F4tud6mkXBQ4v47xj7LuPKG4Tw7cEMoqeGSZBNMSqNPq
+    Balance:        10,596,115.543761 tokens (1.98%)
+    First Purchase: Unknown
+    Wallet Age:     1d | Activity: 50 tx/day | Tokens Traded: 5
+    Risk Factors:
+       • 📊 Limited diversity: 5 tokens (6pts)
+       • 🆕 Brand new wallet: 1 day(s) old (15pts)
+       • 💰 Same funder as 1 other holder(s) (8pts)
+
+#14 🟢 LOW (Score: 28/100) ────────────────────
+    Normal holder behavior
+    Wallet:         4XjxSbXXxMmFBiVWNXezZomkkeikNGWxQLBLjxJhVwrn
+    Balance:        26,362,630.531451 tokens (4.94%)
+    First Purchase: Unknown
+    Wallet Age:     1d | Activity: 50 tx/day | Tokens Traded: 4
+    Risk Factors:
+       • 📊 Limited diversity: 4 tokens (6pts)
+       • 📈 Notable holder: 4.94% (7pts)
+       • 🆕 Brand new wallet: 1 day(s) old (15pts)
+
+#15 🟢 LOW (Score: 28/100) ────────────────────
+    Normal holder behavior
+    Wallet:         9Qdo7PmW8pfZ5tAoGeDGrkcGrskgsBVwfsUUcED3s6z2
+    Balance:        21,183,666.956304 tokens (3.97%)
+    First Purchase: Unknown
+    Wallet Age:     1d | Activity: 39.18 tx/day | Tokens Traded: 5
+    Risk Factors:
+       • 📊 Limited diversity: 5 tokens (6pts)
+       • 📈 Notable holder: 3.97% (7pts)
+       • 🆕 Brand new wallet: 1 day(s) old (15pts)
+
+#16 🟢 LOW (Score: 28/100) ────────────────────
+    Normal holder behavior
+    Wallet:         NcsG4xenJ8ixJ3adisFcL5d3UZsoevL9vL3cfgSkD6U
+    Balance:        16,419,520.460026 tokens (3.07%)
+    First Purchase: Unknown
+    Wallet Age:     1d | Activity: 50 tx/day | Tokens Traded: 3
+    Risk Factors:
+       • 📊 Limited diversity: 3 tokens (6pts)
+       • 📈 Notable holder: 3.07% (7pts)
+       • 🆕 Brand new wallet: 1 day(s) old (15pts)
+
+#17 🟢 LOW (Score: 28/100) ────────────────────
+    Normal holder behavior
+    Wallet:         EQVWffsFC9zNuPc43tmySuVNsAWQFiiCtTbgNu4REYAQ
+    Balance:        13,506,301.842454 tokens (2.53%)
+    First Purchase: Unknown
+    Wallet Age:     1d | Activity: 45.12 tx/day | Tokens Traded: 5
+    Risk Factors:
+       • 📊 Limited diversity: 5 tokens (6pts)
+       • 📈 Notable holder: 2.53% (7pts)
+       • 🆕 Brand new wallet: 1 day(s) old (15pts)
+
+#18 🟢 LOW (Score: 22/100) ────────────────────
+    Normal holder behavior
+    Wallet:         A9hH2C8CoS21PvVRn4sg5iwNFoSgiSeFQpoxDxAtm9Nu
+    Balance:        18,791,491.470810 tokens (3.52%)
+    First Purchase: Unknown
+    Wallet Age:     1d | Activity: 36.14 tx/day | Tokens Traded: 6
+    Risk Factors:
+       • 📈 Notable holder: 3.52% (7pts)
+       • 🆕 Brand new wallet: 1 day(s) old (15pts)
+
+#19 🟢 LOW (Score: 22/100) ────────────────────
+    Normal holder behavior
+    Wallet:         7r6nAgas189Hq3osDVXHzjeWLr7vLPteTuBxNjZN9Q1T
+    Balance:        12,853,684.427853 tokens (2.41%)
+    First Purchase: Unknown
+    Wallet Age:     1d | Activity: 49.88 tx/day | Tokens Traded: 9
+    Risk Factors:
+       • 📈 Notable holder: 2.41% (7pts)
+       • 🆕 Brand new wallet: 1 day(s) old (15pts)
+
+#20 🟢 LOW (Score: 22/100) ────────────────────
+    Normal holder behavior
+    Wallet:         FuUVHh8jcU5sB1RD61u7gJ5Jp84aCAHxaPoZuVbfT9jx
+    Balance:        12,634,265.853537 tokens (2.37%)
+    First Purchase: Unknown
+    Wallet Age:     1d | Activity: 50 tx/day | Tokens Traded: 6
+    Risk Factors:
+       • 📈 Notable holder: 2.37% (7pts)
+       • 🆕 Brand new wallet: 1 day(s) old (15pts)
+
+════════════════════════════════════════════════════════════════════════════════
+Total Balance (Top 20): 534,036,152.153423 tokens
+════════════════════════════════════════════════════════════════════════════════
+💰 =============================================================================
+FUNDING CHAIN ANALYSIS (Sybil Detection)
+================================================================================
+
+📋 WALLET FUNDING ORIGINS:
+────────────────────────────────────────────────────────────────────────────────
+  2DxxYabaeF2eCi2duW9EA9QNr1UjAPqyMXrWmYW7ZxSD
+    ← Unknown  [?] 
+  4XjxSbXXxMmFBiVWNXezZomkkeikNGWxQLBLjxJhVwrn
+    ← J4jETys5Sca4pJWgyGEituAJAxKgWT8Fdn4CupJ8Wzmn  (12.0750 SOL) [2026-02-15 17:09:01] 
+  4vKMT621kJ3unxGjGQnXJgCGxdxqFd2Zn5xQMUX8ueV3
+    ← FcxZozFNfJp9m7Xp6Z9i6MsmQt43VLqnHud16PneT79g  (0.5051 SOL) [2026-02-15 17:26:19] ← Db6aVtyn5pgP97DbmpUvunUMDursmrpbqLBcMLkY9veG 
+  AfENtt3nevWbkv1TdMwvwSiJ9rEZys5CSor76kictnQo
+    ← 9p2t8UW2PXpbJps6nvL6txoJdeehdevtBH3MnPLLntaR  (0.9732 SOL) [2026-02-15 17:32:22] 
+  HqkhPu4kh2QraxmGQMZNoeznBVGVf36LGTicvjHA6W44
+    ← pohJj8FSmifd5V2kpgbzekrnnwZ89LmDg7kEFEu5vuW  (0.0000 SOL) [2026-02-15 17:58:34] ← po27vzv7pSZYsroDopmGVVBVAqxg4GcyZXxmCkoejFB 
+  F3m3PTMiFrLsDW4p9tWLGMqcmrDoyzKDT62vATmdX2m5
+    ← 9yMwSPk9mrXSN7yDHUuZurAh1sjbJsfpUqjZ7SvVtdco  (0.0064 SOL) [2026-02-12 12:03:11] ← 98DKmwQMGGUdXRHjQExpuEWCtXonwDX6aRupvmSmCdcW 
+  9Qdo7PmW8pfZ5tAoGeDGrkcGrskgsBVwfsUUcED3s6z2
+    ← GgkFx3tYTdzSao8CbsvTePvyRn5LP49pzrm1yQGrjtGK  (0.9505 SOL) [2026-02-15 06:34:54] 
+  A9hH2C8CoS21PvVRn4sg5iwNFoSgiSeFQpoxDxAtm9Nu
+    ← Unknown  [?] 
+  NcsG4xenJ8ixJ3adisFcL5d3UZsoevL9vL3cfgSkD6U
+    ← CjootrGVGNM6pBPKiZtJZQ6Vmqs2zsTjimWfrzmRKF9Y  (0.0000 SOL) [2026-02-15 16:01:31] 
+  EQVWffsFC9zNuPc43tmySuVNsAWQFiiCtTbgNu4REYAQ
+    ← Unknown  [?] 
+  4EofPVY7voKY6H58GBh9gmngQHVbBe1dXMMNF873Yx2E
+    ← Dv1mMuKNwqrM1nepzowqFJNKkQsNLsZbPYCd3qht4oyZ  (0.0000 SOL) [2026-02-15 17:17:36] 
+  BQfmhDrKF9NUPi96CkMhHCk5FRYd5uucoWLmUky3iFvn
+    ← 4ZP6tZL2UqqRpeUVzeP8n64vLk5ecKvtwXAP93agdcF6  (0.6913 SOL) [2026-02-15 17:04:10] 
+  7r6nAgas189Hq3osDVXHzjeWLr7vLPteTuBxNjZN9Q1T
+    ← BiiX2ns1uuZeds31gteQL5MeyNpDEbaoCxVX2UPTQJ5s  (0.0000 SOL) [2026-02-15 16:09:36] 
+  FuUVHh8jcU5sB1RD61u7gJ5Jp84aCAHxaPoZuVbfT9jx
+    ← DXstPSgWCBPwTv6oRL55xpWJZyouMze8JULxmfvBqPbi  (0.0000 SOL) [2026-02-15 07:12:39] ← 4MWFZV2PV4xbgF54Yx7mCdUgusDGbP2ZLSXd54k9iwQ8 
+  BQFZr96tTu7SrnrDdLGCMAnWLqtaoBgzcBKm3cudmJJj
+    ← ER6p1yLT7v8NwNP4S19J2JqZsbeMAHR4Z8qvGUDHsWQm  (1.2395 SOL) [2026-02-15 17:08:46] ← EViypwhrEg1YXGdFX6iZRRuYC6GyfCFNHggtdEw6Cfgm 
+  5XfVNdcNQkNg9v3UoqqWiHpbYUfqvsBHxiacWLfJKtw4
+    ← 5Z84wihCtpNP9W58KoExJ5e9CG4SP2QUUg6tsnXb9WGF  (0.0000 SOL) [2026-02-15 06:25:10] 
+  6ZiWEdfo6Yd75q33Qk6MSvYPnVtjMnyjJ5xDYghB9hjk
+    ← po27vzv7pSZYsroDopmGVVBVAqxg4GcyZXxmCkoejFB  (0.0000 SOL) [2026-02-15 17:39:47] ← pohJj8FSmifd5V2kpgbzekrnnwZ89LmDg7kEFEu5vuW 
+  5nmD8azDM83qti3F5fECVTDdQaoMf89ySRYYp5cFgjP9
+    ← Unknown  [?] 
+  F4tud6mkXBQ4v47xj7LuPKG4Tw7cEMoqeGSZBNMSqNPq
+    ← 5Z84wihCtpNP9W58KoExJ5e9CG4SP2QUUg6tsnXb9WGF  (0.0000 SOL) [2026-02-15 14:52:19] 
+  7dJKcmGHdcLFTgbEXFuLYaEnGdX3Rr78yFedXccof5NV
+    ← A8nAgyviTukE1PJBN34iXGSwbzQVYrGmhh7amPTXYVD1  (0.0000 SOL) [2026-02-15 17:40:58] 
+
+🚨 SYBIL CLUSTERS DETECTED:
+────────────────────────────────────────────────────────────────────────────────
+
+  Cluster #1 — 2 wallets — 🔗 Shared Funder: pohJj8FSmifd5V2kpgbzekrnnwZ89LmDg7kEFEu5vuW 
+    • HqkhPu4kh2QraxmGQMZNoeznBVGVf36LGTicvjHA6W44  (24,872,614.365 tokens)
+    • 6ZiWEdfo6Yd75q33Qk6MSvYPnVtjMnyjJ5xDYghB9hjk  (11,048,811.039 tokens)
+
+  Cluster #2 — 2 wallets — 🔗 Shared Funder: po27vzv7pSZYsroDopmGVVBVAqxg4GcyZXxmCkoejFB 
+    • HqkhPu4kh2QraxmGQMZNoeznBVGVf36LGTicvjHA6W44  (24,872,614.365 tokens)
+    • 6ZiWEdfo6Yd75q33Qk6MSvYPnVtjMnyjJ5xDYghB9hjk  (11,048,811.039 tokens)
+
+  Cluster #3 — 2 wallets — 🔗 Shared Funder: 5Z84wihCtpNP9W58KoExJ5e9CG4SP2QUUg6tsnXb9WGF 
+    • 5XfVNdcNQkNg9v3UoqqWiHpbYUfqvsBHxiacWLfJKtw4  (11,137,107.373 tokens)
+    • F4tud6mkXBQ4v47xj7LuPKG4Tw7cEMoqeGSZBNMSqNPq  (10,596,115.544 tokens)
+
+================================================================================

@@ -79,6 +79,7 @@ export const LIQUIDITY_PROGRAMS = new Set([
   'BSfD6SHZigAfDWSjzD5Q41jw8LmKwtmjskPH9oYFa2Bh',  // Pump.fun Migration Authority
   '39azUYFWPz3VHgKCf3VChUwbpURdCHRxjWVowf5jUJjg',  // Pump.fun DEX
   'FWMFkL4gJbLphiEejbt6KDj5FbN6cYAbyMfDUZ4dfFdb',  // Pump.fun LP Token vault
+  '2DxxYabaeF2eCi2duW9EA9QNr1UjAPqyMXrWmYW7ZxSD',  // Pump.fun Liquidity Wallet
 
   // Meteora
   'LBUZKhRxPF3XUpBCjp4YzTKgLccjZhTSDM9YuVaPwxo',   // Meteora DLMM
