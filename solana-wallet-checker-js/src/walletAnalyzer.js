@@ -6,6 +6,7 @@
  */
 
 import { RateLimitedRPC } from './rateLimiter.js';
+import { isUniversalToken } from './knownEntities.js';
 
 /** Wallet classification types */
 export const WalletType = {
@@ -69,7 +70,8 @@ export class WalletAnalyzer {
   }
 
   /**
-   * Count unique tokens from transaction history.
+   * Count unique tokens using getTokenAccountsByOwner (accurate) +
+   * find first transaction time and initial funder via signature pagination.
    * @param {string} address 
    * @param {string|null} currentToken - Token to exclude from count
    * @returns {Promise<{uniqueTokenCount: number, firstTxTime: Date|null, initialFunder: string|null}>}
@@ -79,91 +81,75 @@ export class WalletAnalyzer {
     let firstTxTime = null;
     let initialFunder = null;
 
-    try {
-      const signatures = await this.getSignaturesForAddress(address, 100);
+    // ── Step 1: Get accurate token count via getTokenAccountsByOwner ──
+    for (const programId of [TOKEN_PROGRAM_ID, TOKEN_2022_PROGRAM_ID]) {
+      try {
+        const result = await this.rpc.call('getTokenAccountsByOwner', [
+          address,
+          { programId },
+          { encoding: 'jsonParsed' },
+        ]);
+        if (result?.value) {
+          for (const acct of result.value) {
+            const info = acct.account?.data?.parsed?.info;
+            if (!info?.mint) continue;
+            const mint = info.mint;
+            if (mint === currentToken) continue;
+            if (isUniversalToken(mint)) continue;
+            const amount = parseFloat(info.tokenAmount?.uiAmount || '0');
+            if (amount > 0) uniqueTokens.add(mint);
+          }
+        }
+      } catch { /* skip */ }
+    }
 
-      if (!signatures || signatures.length === 0) {
-        return { uniqueTokenCount: 0, firstTxTime: null, initialFunder: null };
+    // ── Step 2: Find true oldest tx via signature pagination (up to 3000 txs) ──
+    try {
+      let before = undefined;
+      let oldestSig = null;
+      const MAX_PAGES = 3;
+
+      for (let page = 0; page < MAX_PAGES; page++) {
+        const opts = { limit: 1000 };
+        if (before) opts.before = before;
+        const sigs = await this.rpc.call('getSignaturesForAddress', [address, opts]);
+        if (!sigs || sigs.length === 0) break;
+
+        oldestSig = sigs[sigs.length - 1];
+        if (sigs.length < 1000) break;
+        before = oldestSig.signature;
       }
 
-      // Get oldest transaction (last in list) for first tx time and funder
-      const oldestSig = signatures[signatures.length - 1];
       if (oldestSig) {
-        firstTxTime = oldestSig.blockTime 
-          ? new Date(oldestSig.blockTime * 1000) 
+        firstTxTime = oldestSig.blockTime
+          ? new Date(oldestSig.blockTime * 1000)
           : null;
 
+        // Find initial funder from oldest transaction
         try {
           const oldestTx = await this.getTransaction(oldestSig.signature);
-          if (oldestTx) {
-            const meta = oldestTx.meta;
-            if (meta) {
-              const preBalances = meta.preBalances || [];
-              const postBalances = meta.postBalances || [];
-              const accountKeys = oldestTx.transaction?.message?.accountKeys || [];
+          if (oldestTx?.meta) {
+            const preBalances = oldestTx.meta.preBalances || [];
+            const postBalances = oldestTx.meta.postBalances || [];
+            const accountKeys = oldestTx.transaction?.message?.accountKeys || [];
 
-              for (let i = 0; i < preBalances.length; i++) {
-                if (preBalances[i] > postBalances[i] && i < accountKeys.length) {
-                  const key = accountKeys[i];
-                  const funderAddress = typeof key === 'object' ? key.pubkey?.toString() : key?.toString();
-                  if (funderAddress && funderAddress !== address) {
-                    initialFunder = funderAddress;
-                    break;
-                  }
+            for (let i = 0; i < preBalances.length; i++) {
+              if (preBalances[i] > postBalances[i] && i < accountKeys.length) {
+                const key = accountKeys[i];
+                const funderAddress = typeof key === 'object' ? key.pubkey?.toString() : key?.toString();
+                if (funderAddress && funderAddress !== address) {
+                  initialFunder = funderAddress;
+                  break;
                 }
               }
             }
           }
-        } catch (err) {
+        } catch {
           // Ignore error on funder detection
         }
       }
-
-      // Analyze recent transactions for token activity
-      const recentSigs = signatures.slice(0, 50);
-      for (const sigInfo of recentSigs) {
-        try {
-          const tx = await this.getTransaction(sigInfo.signature);
-          if (!tx || !tx.meta) continue;
-
-          const meta = tx.meta;
-
-          // Check pre and post token balances
-          const preTokenBalances = meta.preTokenBalances || [];
-          const postTokenBalances = meta.postTokenBalances || [];
-
-          for (const tokenBal of [...preTokenBalances, ...postTokenBalances]) {
-            const mint = tokenBal.mint;
-            if (mint && mint !== currentToken) {
-              uniqueTokens.add(mint);
-            }
-          }
-
-          // Check innerInstructions for token program calls
-          const innerInstructions = meta.innerInstructions || [];
-          for (const innerGroup of innerInstructions) {
-            for (const inst of (innerGroup.instructions || [])) {
-              const programId = inst.programId?.toString();
-              if (programId === TOKEN_PROGRAM_ID || programId === TOKEN_2022_PROGRAM_ID) {
-                const parsed = inst.parsed;
-                if (parsed && typeof parsed === 'object') {
-                  const mint = parsed.info?.mint;
-                  if (mint && mint !== currentToken) {
-                    uniqueTokens.add(mint);
-                  }
-                }
-              }
-            }
-          }
-        } catch (err) {
-          continue;
-        }
-
-        // Small delay to avoid rate limiting
-        await sleep(100);
-      }
-    } catch (err) {
-      // Ignore errors
+    } catch {
+      // Ignore pagination errors
     }
 
     return { uniqueTokenCount: uniqueTokens.size, firstTxTime, initialFunder };

@@ -156,7 +156,7 @@ export class HolderAnalyzer {
     const topHolders = holders.slice(0, limit);
     console.log(`Analyzing top ${topHolders.length} holders...`);
 
-    // Get purchase time + wallet age SEQUENTIALLY
+    // Get purchase time + wallet age + token holdings SEQUENTIALLY
     for (let i = 0; i < topHolders.length; i++) {
       try {
         const purchaseInfo = await this._getFirstPurchaseTime(topHolders[i].owner, tokenMint);
@@ -165,21 +165,27 @@ export class HolderAnalyzer {
           ? purchaseInfo.purchaseTime.toISOString().replace('T', ' ').split('.')[0]
           : 'Unknown';
 
-        // Wallet age & activity metrics
+        // Wallet age & activity metrics (paginated — finds TRUE oldest tx)
         const walletAge = await this._getWalletAge(topHolders[i].owner);
         topHolders[i].walletAgeDays = walletAge.ageDays;
         topHolders[i].txFrequency = walletAge.txPerDay;
         topHolders[i].totalTxCount = walletAge.totalTx;
+
+        // Token holdings — direct query via getTokenAccountsByOwner (accurate!)
+        const tokenData = await this._getWalletTokenAccounts(topHolders[i].owner, tokenMint);
+        topHolders[i].tradedTokens = tokenData.allTokens;
+        topHolders[i].tokenCount = tokenData.tokenCount;
       } catch {
         topHolders[i].purchaseTime = null;
         topHolders[i].purchaseTimeStr = 'Unknown';
         topHolders[i].walletAgeDays = null;
         topHolders[i].txFrequency = 0;
         topHolders[i].totalTxCount = 0;
+        topHolders[i].tradedTokens = new Set();
+        topHolders[i].tokenCount = 0;
       }
-      if (!('tokenCount' in topHolders[i])) topHolders[i].tokenCount = 0;
       if ((i + 1) % 3 === 0 || i === topHolders.length - 1) {
-        console.log(`  Holder info: ${i + 1}/${topHolders.length} analyzed`);
+        console.log(`  Holder info: ${i + 1}/${topHolders.length} | ${topHolders[i].owner.slice(0, 12)}... age=${topHolders[i].walletAgeDays}d tokens=${topHolders[i].tokenCount}`);
       }
     }
 
@@ -192,27 +198,49 @@ export class HolderAnalyzer {
 
   /**
    * Get wallet age in days and activity frequency.
+   * Paginates up to 3 pages (3000 txs) to find the TRUE oldest transaction.
    * Modern tools use this to filter fresh snipers vs organic holders.
    */
   async _getWalletAge(wallet) {
     try {
-      const sigs = await this.rpc.call('getSignaturesForAddress', [wallet, { limit: 50 }]);
-      if (!sigs || sigs.length === 0) return { ageDays: 0, txPerDay: 0, totalTx: 0 };
+      let oldestBlockTime = null;
+      let newestBlockTime = null;
+      let totalTx = 0;
+      let before = undefined;
+      const MAX_PAGES = 3; // max 3 × 1000 = 3000 txs
 
-      const totalTx = sigs.length;
+      for (let page = 0; page < MAX_PAGES; page++) {
+        const opts = { limit: 1000 };
+        if (before) opts.before = before;
 
-      // Sort ascending by slot
-      sigs.sort((a, b) => (a.slot || 0) - (b.slot || 0));
-      const oldest = sigs[0]?.blockTime;
-      const newest = sigs[sigs.length - 1]?.blockTime;
+        const sigs = await this.rpc.call('getSignaturesForAddress', [wallet, opts]);
+        if (!sigs || sigs.length === 0) break;
 
-      if (!oldest) return { ageDays: 0, txPerDay: 0, totalTx };
+        totalTx += sigs.length;
+
+        // First page, first entry = newest tx
+        if (page === 0 && sigs[0]?.blockTime) {
+          newestBlockTime = sigs[0].blockTime;
+        }
+
+        // Last entry of this page = oldest so far
+        const lastSig = sigs[sigs.length - 1];
+        if (lastSig?.blockTime) {
+          oldestBlockTime = lastSig.blockTime;
+        }
+
+        // If fewer than 1000, we've reached the end
+        if (sigs.length < 1000) break;
+        before = lastSig.signature;
+      }
+
+      if (!oldestBlockTime) return { ageDays: 0, txPerDay: 0, totalTx };
 
       const nowSec = Date.now() / 1000;
-      const ageDays = Math.max(1, (nowSec - oldest) / 86400);
+      const ageDays = Math.max(1, (nowSec - oldestBlockTime) / 86400);
 
-      const activeDays = newest && oldest !== newest
-        ? Math.max(1, (newest - oldest) / 86400)
+      const activeDays = (newestBlockTime && oldestBlockTime !== newestBlockTime)
+        ? Math.max(1, (newestBlockTime - oldestBlockTime) / 86400)
         : 1;
       const txPerDay = totalTx / activeDays;
 
@@ -222,10 +250,48 @@ export class HolderAnalyzer {
     }
   }
 
-  // ─── Token Trading History ──────────────────────────────────────────────
+  // ─── Token Accounts (Direct Query) ──────────────────────────────────────
 
   /**
-   * Get list of tokens traded by a wallet.
+   * Get wallet's current token holdings using getTokenAccountsByOwner.
+   * Much more accurate than parsing transaction history.
+   * Returns: { allTokens: Set, heldTokens: Set, tokenCount: number }
+   */
+  async _getWalletTokenAccounts(wallet, excludeToken = null) {
+    const allTokens = new Set();   // all mints found (for Jaccard)
+    const heldTokens = new Set();  // mints with balance > 0 (for token count)
+
+    for (const programId of [TOKEN_PROGRAM_ID, TOKEN_2022_PROGRAM_ID]) {
+      try {
+        const result = await this.rpc.call('getTokenAccountsByOwner', [
+          wallet,
+          { programId },
+          { encoding: 'jsonParsed' },
+        ]);
+        if (result?.value) {
+          for (const acct of result.value) {
+            const info = acct.account?.data?.parsed?.info;
+            if (!info?.mint) continue;
+            const mint = info.mint;
+            if (mint === excludeToken) continue;
+            if (isUniversalToken(mint)) continue;
+
+            allTokens.add(mint);
+            const amount = parseFloat(info.tokenAmount?.uiAmount || '0');
+            if (amount > 0) heldTokens.add(mint);
+          }
+        }
+      } catch { /* skip program */ }
+    }
+
+    return { allTokens, heldTokens, tokenCount: heldTokens.size };
+  }
+
+  // ─── Token Trading History (Fallback) ───────────────────────────────────
+
+  /**
+   * Get list of tokens traded by a wallet from tx history.
+   * Used as fallback when getTokenAccountsByOwner returns empty.
    */
   async _getWalletTokenHistory(wallet, excludeToken = null, limit = 20) {
     const tokens = new Set();
@@ -341,22 +407,38 @@ export class HolderAnalyzer {
    */
   async analyzeHolderSimilarities(holders, currentToken) {
     console.log(`\n🔍 Analyzing trading patterns for ${holders.length} holders (Jaccard method)...`);
-    console.log('Processing sequentially to respect rate limits...\n');
 
-    // Collect token history
+    // Use pre-fetched token data from getTokenHolders, or fetch if missing
+    let fetchedCount = 0;
+    let cachedCount = 0;
     for (let i = 0; i < holders.length; i++) {
-      try {
-        const tokens = await this._getWalletTokenHistory(holders[i].owner, currentToken);
-        holders[i].tradedTokens = tokens;
-        holders[i].tokenCount = tokens.size;
-      } catch {
-        holders[i].tradedTokens = new Set();
-        holders[i].tokenCount = 0;
+      if (holders[i].tradedTokens && holders[i].tradedTokens.size > 0) {
+        cachedCount++;
+        console.log(`   [${i + 1}/${holders.length}] ${holders[i].owner.slice(0, 12)}... → ${holders[i].tradedTokens.size} tokens (cached)`);
+      } else {
+        // Fallback: fetch via getTokenAccountsByOwner
+        try {
+          const tokenData = await this._getWalletTokenAccounts(holders[i].owner, currentToken);
+          holders[i].tradedTokens = tokenData.allTokens;
+          holders[i].tokenCount = tokenData.tokenCount;
+          fetchedCount++;
+        } catch {
+          // Last resort: tx history scan
+          try {
+            const tokens = await this._getWalletTokenHistory(holders[i].owner, currentToken);
+            holders[i].tradedTokens = tokens;
+            holders[i].tokenCount = tokens.size;
+            fetchedCount++;
+          } catch {
+            holders[i].tradedTokens = new Set();
+            holders[i].tokenCount = 0;
+          }
+        }
+        console.log(`   [${i + 1}/${holders.length}] ${holders[i].owner.slice(0, 12)}... → ${holders[i].tokenCount} tokens`);
       }
-      console.log(`   [${i + 1}/${holders.length}] ${holders[i].owner.slice(0, 12)}... → ${holders[i].tokenCount} tokens`);
     }
 
-    console.log('✅ Trading history complete!\n');
+    console.log(`✅ Token data ready! (${cachedCount} cached, ${fetchedCount} fetched)\n`);
 
     // Compute pairwise Jaccard similarities
     const similarities = new Map();
@@ -733,12 +815,15 @@ export class HolderAnalyzer {
 
   async _getFirstPurchaseTime(wallet, tokenMint) {
     try {
-      const signatures = await this.rpc.call('getSignaturesForAddress', [wallet, { limit: 50 }]);
+      // Fetch up to 1000 signatures to find actual purchase (was 50)
+      const signatures = await this.rpc.call('getSignaturesForAddress', [wallet, { limit: 1000 }]);
       if (!signatures || !Array.isArray(signatures) || signatures.length === 0) return null;
 
+      // Sort ascending (oldest first)
       signatures.sort((a, b) => (a.slot || 0) - (b.slot || 0));
 
-      for (const sigInfo of signatures.slice(0, 10)) {
+      // Check up to 20 oldest transactions for the token purchase
+      for (const sigInfo of signatures.slice(0, 20)) {
         const signature = sigInfo.signature;
         const blockTime = sigInfo.blockTime;
         if (!signature) continue;
