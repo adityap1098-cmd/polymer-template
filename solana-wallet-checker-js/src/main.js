@@ -73,26 +73,48 @@ function validateSolanaAddress(address) {
 
 /**
  * RPC health check — verify the RPC endpoint is reachable before starting.
- * Calls getSlot() as a lightweight ping.
+ * Calls getSlot() as a lightweight ping. Retries up to 3 times on 429.
  */
 async function checkRpcHealth(rpcUrl) {
-  try {
-    const resp = await fetch(rpcUrl, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'getSlot', params: [] }),
-      signal: AbortSignal.timeout(10000),
-    });
-    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-    const data = await resp.json();
-    if (data.error) throw new Error(data.error.message || JSON.stringify(data.error));
-    console.log(chalk.green(`  ✅ RPC OK — slot ${data.result}`));
-    return true;
-  } catch (err) {
-    console.log(chalk.red(`  ❌ RPC health check gagal: ${err.message}`));
-    console.log(chalk.yellow('  Pastikan SOLANA_RPC_URL di .env benar dan endpoint aktif.'));
-    return false;
+  for (let attempt = 1; attempt <= 3; attempt++) {
+    try {
+      const resp = await fetch(rpcUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'getSlot', params: [] }),
+        signal: AbortSignal.timeout(10000),
+      });
+      if (resp.status === 429) {
+        const wait = 1000 * attempt;
+        console.log(chalk.yellow(`  ⏳ Rate limited (429), retry ${attempt}/3 dalam ${wait}ms...`));
+        await sleep(wait);
+        continue;
+      }
+      if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+      const data = await resp.json();
+      if (data.error) {
+        if (data.error.code === 429 || String(data.error.message).includes('429')) {
+          const wait = 1000 * attempt;
+          console.log(chalk.yellow(`  ⏳ Rate limited, retry ${attempt}/3 dalam ${wait}ms...`));
+          await sleep(wait);
+          continue;
+        }
+        throw new Error(data.error.message || JSON.stringify(data.error));
+      }
+      console.log(chalk.green(`  ✅ RPC OK — slot ${data.result}`));
+      return true;
+    } catch (err) {
+      if (attempt < 3 && err.message?.includes('429')) {
+        await sleep(1000 * attempt);
+        continue;
+      }
+      console.log(chalk.red(`  ❌ RPC health check gagal: ${err.message}`));
+      console.log(chalk.yellow('  Pastikan SOLANA_RPC_URL di .env benar dan endpoint aktif.'));
+      return false;
+    }
   }
+  console.log(chalk.red('  ❌ RPC health check gagal setelah 3x retry (rate limited)'));
+  return false;
 }
 
 // ─── Banner ─────────────────────────────────────────────────────────────────
