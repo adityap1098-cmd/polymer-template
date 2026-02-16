@@ -93,7 +93,7 @@ export class RateLimitedRPC {
   /**
    * Make a rate-limited JSON-RPC call.
    * @param {string} method 
-   * @param {Array} params 
+   * @param {Array|Object} params - Array for standard RPC, Object for DAS methods
    * @param {number} maxRetries
    * @returns {Promise<any>}
    */

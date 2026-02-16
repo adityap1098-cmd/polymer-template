@@ -134,24 +134,27 @@ export class HolderAnalyzer {
         // First, get token decimals via DAS getAsset
         let tokenDecimals = 0;
         try {
-          const assetInfo = await this.rpc.call('getAsset', [{
+          const assetInfo = await this.rpc.call('getAsset', {
             id: tokenMint,
             displayOptions: { showFungible: true },
-          }]);
+          });
           tokenDecimals = assetInfo?.token_info?.decimals || 0;
         } catch { /* will use 0 decimals */ }
 
-        // Paginate through ALL token accounts (1000 per page)
-        const MAX_PAGES = 10; // 10 × 1000 = 10,000 max holders
+        // Paginate through token accounts (1000 per page)
+        // Limit pages based on how many holders we need:
+        //   limit × 3 accounts ÷ 1000 per page (headroom for filtering)
+        const neededAccounts = Math.max(limit * 3, 500);
+        const MAX_PAGES = Math.min(10, Math.ceil(neededAccounts / 1000));
         let page = 1;
         let hasMore = true;
 
         while (hasMore && page <= MAX_PAGES) {
-          const result = await this.rpc.call('getTokenAccounts', [{
+          const result = await this.rpc.call('getTokenAccounts', {
             mintAddress: tokenMint,
             page,
             limit: 1000,
-          }]);
+          });
 
           const accounts = result?.token_accounts;
           if (!accounts || !Array.isArray(accounts) || accounts.length === 0) break;
@@ -419,6 +422,22 @@ export class HolderAnalyzer {
     }
 
     // ═══════════════════════════════════════════════════════════════════
+    // PHASE 2.7: Pre-limit — only check top N wallets in Phase 3
+    //   When DAS getTokenAccounts returns thousands of holders,
+    //   we only need to PDA-check the top candidates (by balance).
+    //   Use limit × 3 to have headroom for PDA filtering.
+    // ═══════════════════════════════════════════════════════════════════
+
+    if (holders.length > limit * 3) {
+      holders.sort((a, b) => b.balance - a.balance);
+      const preLimit = limit * 3;
+      console.log(`  ✂️ Pre-limiting: ${holders.length} → top ${preLimit} by balance (for PDA check efficiency)`);
+      holders.length = preLimit;
+      unknownOwners.length = 0;
+      unknownOwners.push(...holders.map(h => h.owner));
+    }
+
+    // ═══════════════════════════════════════════════════════════════════
     // PHASE 3: Dynamic PDA Detection — check wallet program ownership
     //   For on-curve wallets, verify via getMultipleAccounts that
     //   wallet.owner === System Program. Identifies program-owned
@@ -432,9 +451,10 @@ export class HolderAnalyzer {
       const pdaDetected = new Map(); // owner → { programId, label }
 
       // Also collect off-curve PDA addresses to upgrade their labels
-      const offCurvePDAs = filteredEntities
-        .filter(e => e.type === 'PDA_CURVE')
-        .map(e => e.owner);
+      // Only upgrade labels if there aren't too many (avoid wasting RPC calls)
+      const offCurvePDAs = filteredEntities.length <= 200
+        ? filteredEntities.filter(e => e.type === 'PDA_CURVE').map(e => e.owner)
+        : [];
       const allToCheck = [...new Set([...unknownOwners, ...offCurvePDAs])];
 
       // Batch check using getMultipleAccounts (chunk size respects plan limit)
@@ -508,8 +528,12 @@ export class HolderAnalyzer {
 
     if (filteredEntities.length > 0) {
       console.log(`🔍 Total filtered: ${filteredEntities.length} non-human entities`);
-      for (const ent of filteredEntities) {
+      const showEntities = filteredEntities.slice(0, 20);
+      for (const ent of showEntities) {
         console.log(`   ↳ ${ent.label}${ent.balance > 0 ? ` — ${ent.balance.toLocaleString('en-US', { maximumFractionDigits: 0 })} tokens` : ''}`);
+      }
+      if (filteredEntities.length > 20) {
+        console.log(`   ... and ${filteredEntities.length - 20} more`);
       }
     }
 
@@ -773,7 +797,7 @@ export class HolderAnalyzer {
     if (this.config.useEnhancedTx) {
       try {
         const txs = await this.rpc.call('getTransactionsForAddress', [
-          wallet, { limit: scanLimit, encoding: 'jsonParsed' },
+          wallet, { limit: scanLimit, encoding: 'jsonParsed', maxSupportedTransactionVersion: 0 },
         ]);
 
         if (Array.isArray(txs) && txs.length > 0) {
@@ -1297,7 +1321,7 @@ export class HolderAnalyzer {
         try {
           // Fetch a moderate batch to find earliest purchase
           const txs = await this.rpc.call('getTransactionsForAddress', [
-            wallet, { limit: Math.min(scanLimit, 200), encoding: 'jsonParsed' },
+            wallet, { limit: Math.min(scanLimit, 200), encoding: 'jsonParsed', maxSupportedTransactionVersion: 0 },
           ]);
 
           if (Array.isArray(txs) && txs.length > 0) {
