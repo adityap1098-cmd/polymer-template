@@ -78,6 +78,8 @@ function printBanner() {
   if (plan.useEnhancedTx) enhancedApis.push('EnhancedTx');
   if (plan.useDAS) enhancedApis.push('DAS');
   if (plan.useSNS) enhancedApis.push('SNS');
+  if (plan.useProgramAccounts) enhancedApis.push('ProgramAccounts');
+  if (plan.detectProgramOwned) enhancedApis.push('PDA-Detect');
   const apiStr = enhancedApis.length > 0 ? enhancedApis.join(' · ') : 'Standard only';
 
   console.log(chalk.cyan(`
@@ -222,15 +224,21 @@ async function analyzeTopHolders(tokenAddress) {
   const rpcUrl = process.env.SOLANA_RPC_URL || 'https://api.mainnet-beta.solana.com';
   const plan = getPlanConfig();
 
+  const maxHolders = plan.useProgramAccounts ? 200 : 50;
   console.log(chalk.yellow('\nHow many top holders to analyze?'));
-  console.log(`  Recommended: 15-20 (balanced speed and coverage)`);
-  console.log('  ⚠️  Note: Solana RPC typically returns ~20 largest accounts (API limitation)');
-  console.log(`  Maximum input: 50, but actual results may be limited by Solana API`);
+  if (plan.useProgramAccounts) {
+    console.log(`  ⚡ Paid plan: getProgramAccounts unlocks ALL holders (up to ${maxHolders})`);
+    console.log(`  Recommended: 50-100 (balanced speed & coverage), Max: ${maxHolders}`);
+  } else {
+    console.log(`  Recommended: 15-20 (balanced speed and coverage)`);
+    console.log('  ⚠️  Note: Free plan limited to ~20 largest accounts (Solana API limit)');
+    console.log(`  Maximum: ${maxHolders}`);
+  }
 
   const holderInput = await ask(chalk.green(`\nNumber of holders [default: ${plan.topHolders}] > `));
   let holderLimit = parseInt(holderInput, 10);
   if (isNaN(holderLimit)) holderLimit = plan.topHolders;
-  holderLimit = Math.max(5, Math.min(50, holderLimit));
+  holderLimit = Math.max(5, Math.min(maxHolders, holderLimit));
 
   console.log(chalk.cyan(`\n🔍 Analyzing Top ${holderLimit} Token Holders (${plan.name} mode)...\n`));
 

@@ -15,6 +15,7 @@ import { TransactionMonitor } from './transactionMonitor.js';
 import {
   EXCHANGE_WALLETS, LIQUIDITY_PROGRAMS, UNIVERSAL_TOKENS,
   identifyExchange, isLiquidityProgram, isUniversalToken, getEntityLabel,
+  KNOWN_PROGRAM_LABELS, SYSTEM_PROGRAM_ID, getProgramLabel, isUserWallet,
 } from './knownEntities.js';
 import { InsiderDetector } from './insiderDetector.js';
 import { getPlanConfig, PLANS } from './planConfig.js';
@@ -961,6 +962,8 @@ describe('PlanConfig', () => {
     assert.equal(PLANS.paid.useEnhancedTx, true);
     assert.equal(PLANS.paid.useDAS, true);
     assert.equal(PLANS.paid.useSNS, true);
+    assert.equal(PLANS.paid.useProgramAccounts, true);
+    assert.equal(PLANS.paid.detectProgramOwned, true);
   });
 
   it('free plan should have enhanced API flags disabled', () => {
@@ -968,6 +971,12 @@ describe('PlanConfig', () => {
     assert.equal(PLANS.free.useEnhancedTx, false);
     assert.equal(PLANS.free.useDAS, false);
     assert.equal(PLANS.free.useSNS, false);
+    assert.equal(PLANS.free.useProgramAccounts || false, false);
+    assert.equal(PLANS.free.detectProgramOwned || false, false);
+  });
+
+  it('paid plan topHolders should be 200 (getProgramAccounts unlocked)', () => {
+    assert.equal(PLANS.paid.topHolders, 200);
   });
 });
 
@@ -981,11 +990,15 @@ describe('HolderAnalyzer - Enhanced Config', () => {
       useEnhancedTx: true,
       useDAS: true,
       useSNS: true,
+      useProgramAccounts: true,
+      detectProgramOwned: true,
     });
     assert.equal(analyzer.config.useBatchAccounts, true);
     assert.equal(analyzer.config.useEnhancedTx, true);
     assert.equal(analyzer.config.useDAS, true);
     assert.equal(analyzer.config.useSNS, true);
+    assert.equal(analyzer.config.useProgramAccounts, true);
+    assert.equal(analyzer.config.detectProgramOwned, true);
   });
 
   it('should default enhanced flags to false', () => {
@@ -1106,5 +1119,100 @@ describe('InsiderDetector - Enhanced Config', () => {
     const groupsWithSNS = detector.detectInsiderGroups(holders, similarity, funding, [], snsDomains);
     assert.ok(groupsWithSNS.length >= 1);
     assert.ok(groupsWithSNS[0].confidence < confNoSNS, `SNS should reduce confidence: ${groupsWithSNS[0].confidence} < ${confNoSNS}`);
+  });
+});
+
+// ============== getProgramAccounts & PDA Detection Tests ==============
+
+describe('Known Entities - Program Labels (PDA Detection)', () => {
+  it('KNOWN_PROGRAM_LABELS should contain Pump.fun programs', () => {
+    assert.ok(KNOWN_PROGRAM_LABELS.size >= 20, `Expected 20+ program labels, got ${KNOWN_PROGRAM_LABELS.size}`);
+    assert.ok(KNOWN_PROGRAM_LABELS.has('6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P'), 'Should have Pump.fun');
+    assert.ok(KNOWN_PROGRAM_LABELS.get('6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P').includes('Pump.fun'));
+  });
+
+  it('KNOWN_PROGRAM_LABELS should contain Raydium, Orca, Jupiter', () => {
+    assert.ok(KNOWN_PROGRAM_LABELS.has('675kPX9MHTjS2zt1qfr1NYHuzeLXfQM9H24wFSUt1Mp8'), 'Should have Raydium');
+    assert.ok(KNOWN_PROGRAM_LABELS.has('whirLbMiicVdio4qvUfM5KAg6Ct8VwpYzGff3uctyCc'), 'Should have Orca');
+    assert.ok(KNOWN_PROGRAM_LABELS.has('JUP6LkbZbjS1jKKwapdHNy74zcZ3tLUZoi5QNyVTaV4'), 'Should have Jupiter');
+  });
+
+  it('getProgramLabel() should return label for known programs', () => {
+    const pumpLabel = getProgramLabel('6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P');
+    assert.ok(pumpLabel, 'Should return label for Pump.fun');
+    assert.ok(pumpLabel.includes('Pump.fun'), `Label should mention Pump.fun: ${pumpLabel}`);
+    assert.ok(pumpLabel.includes('🐸'), 'Should have frog emoji for Pump.fun');
+  });
+
+  it('getProgramLabel() should return null for unknown programs', () => {
+    assert.equal(getProgramLabel('UnknownProgram123456789012345678901234'), null);
+  });
+
+  it('getProgramLabel() should return label for Raydium AMM', () => {
+    const label = getProgramLabel('675kPX9MHTjS2zt1qfr1NYHuzeLXfQM9H24wFSUt1Mp8');
+    assert.ok(label.includes('Raydium'));
+  });
+});
+
+describe('Known Entities - isUserWallet()', () => {
+  it('System Program owner = real user wallet', () => {
+    assert.equal(isUserWallet(SYSTEM_PROGRAM_ID), true);
+  });
+
+  it('Pump.fun program owner = PDA (not user)', () => {
+    assert.equal(isUserWallet('6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P'), false);
+  });
+
+  it('Token Program owner = PDA (not user)', () => {
+    assert.equal(isUserWallet('TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA'), false);
+  });
+
+  it('Raydium AMM owner = PDA (not user)', () => {
+    assert.equal(isUserWallet('675kPX9MHTjS2zt1qfr1NYHuzeLXfQM9H24wFSUt1Mp8'), false);
+  });
+
+  it('SYSTEM_PROGRAM_ID should be standard system program', () => {
+    assert.equal(SYSTEM_PROGRAM_ID, '11111111111111111111111111111111');
+  });
+});
+
+describe('HolderAnalyzer - getProgramAccounts & PDA Detection Config', () => {
+  it('should default useProgramAccounts and detectProgramOwned to false', () => {
+    const analyzer = new HolderAnalyzer(TEST_RPC, {});
+    assert.equal(analyzer.config.useProgramAccounts, false);
+    assert.equal(analyzer.config.detectProgramOwned, false);
+  });
+
+  it('paid plan config should enable getProgramAccounts + PDA detection', () => {
+    const analyzer = new HolderAnalyzer(TEST_RPC, PLANS.paid);
+    assert.equal(analyzer.config.useProgramAccounts, true);
+    assert.equal(analyzer.config.detectProgramOwned, true);
+  });
+
+  it('free plan config should NOT enable getProgramAccounts + PDA detection', () => {
+    const analyzer = new HolderAnalyzer(TEST_RPC, PLANS.free);
+    assert.equal(analyzer.config.useProgramAccounts, false);
+    assert.equal(analyzer.config.detectProgramOwned, false);
+  });
+});
+
+describe('Output Formatting - Entities show names only (no addresses)', () => {
+  it('filtered entities output should NOT contain raw wallet addresses', () => {
+    const analyzer = new HolderAnalyzer(TEST_RPC, PLANS.free);
+    const holders = [
+      { owner: 'UserWallet1234567890123456789012345678901', balance: 1000, walletAgeDays: 30, tokenCount: 10, historicalTokenCount: 10, tradedTokens: new Set(['T1']), purchaseTimeStr: 'Unknown', totalTxCount: 50, txFrequency: 2 },
+    ];
+    const filteredEntities = [
+      { owner: '5tzFkiKscXHK5ZXCGbXZxdw7gTjjD1mBwuoFbhUvuAi9', type: 'EXCHANGE', label: '🏦 Binance', balance: 5000 },
+      { owner: 'PumpFunBondingCurvePDA12345678901234567890', type: 'PDA', label: '🐸 Pump.fun Bonding Curve', balance: 50000000 },
+    ];
+    const output = analyzer.formatHoldersOutput(holders, 'TestMint123', null, null, filteredEntities);
+
+    // Filtered entities section should show labels, NOT raw addresses
+    assert.ok(output.includes('🏦 Binance'), 'Should show Binance label');
+    assert.ok(output.includes('🐸 Pump.fun Bonding Curve'), 'Should show Pump.fun label');
+    // Should NOT contain the raw exchange address in the filtered section
+    assert.ok(!output.includes('5tzFkiKscXHK5ZXCGbXZxdw7gTjjD1mBwuoFbhUvuAi9'), 'Should NOT show raw exchange address');
+    assert.ok(!output.includes('PumpFunBondingCurvePDA12345678901234567890'), 'Should NOT show raw PDA address');
   });
 });

@@ -38,7 +38,7 @@ const PLANS = {
   paid: {
     name: 'Build ($42/mo)',
     maxRps: 40,              // 80% of 50 req/s limit
-    topHolders: 20,          // Keep 20 — Solana getTokenLargestAccounts returns max ~20
+    topHolders: 200,         // getProgramAccounts unlocks ALL holders — analyze top 200
     txHistoryPerWallet: 200, // 4× deeper token scan → much better Jaccard
     walletAgePages: 5,       // 5 × 1000 = 5000 tx for age
     fundingHops: 4,          // 4-hop deep funding chain (team obfuscation)
@@ -51,6 +51,8 @@ const PLANS = {
     useEnhancedTx: true,     // getTransactionsForAddress — eliminates N+1 pattern (~50× fewer calls)
     useDAS: true,            // DAS getAssetsByOwner — complete token/NFT profile
     useSNS: true,            // SNS .sol domain detection — identity signal for risk scoring
+    useProgramAccounts: true, // getProgramAccounts — fetch ALL holder accounts (200+), not just top 20
+    detectProgramOwned: true, // Check wallet .owner field — catches ALL DEX/Pump.fun PDAs dynamically
 
     description: 'QuickNode Build — 50 req/s, 80M credits/mo',
   },

@@ -16,6 +16,7 @@ import { RateLimitedRPC } from './rateLimiter.js';
 import {
   EXCHANGE_WALLETS, LIQUIDITY_PROGRAMS, UNIVERSAL_TOKENS,
   identifyExchange, isLiquidityProgram, isUniversalToken, getEntityLabel,
+  KNOWN_PROGRAM_LABELS, SYSTEM_PROGRAM_ID, getProgramLabel, isUserWallet,
 } from './knownEntities.js';
 
 const TOKEN_PROGRAM_ID = 'TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA';
@@ -77,6 +78,8 @@ export class HolderAnalyzer {
       useEnhancedTx: config.useEnhancedTx || false,
       useDAS: config.useDAS || false,
       useSNS: config.useSNS || false,
+      useProgramAccounts: config.useProgramAccounts || false,
+      detectProgramOwned: config.detectProgramOwned || false,
     };
     this.rpc = new RateLimitedRPC(rpcUrl, this.config.maxRps);
   }
@@ -92,124 +95,277 @@ export class HolderAnalyzer {
   async getTokenHolders(tokenMint, limit = 50) {
     console.log(`Fetching token accounts for ${tokenMint}...`);
 
-    const largest = await this.rpc.call('getTokenLargestAccounts', [tokenMint]);
-    if (!largest || !largest.value || largest.value.length === 0) {
-      console.log('No token accounts found for this token');
-      return [];
-    }
+    let rawAccounts = []; // Array of { tokenAccount, owner, balance (raw), decimals }
 
-    const accounts = largest.value;
-    const actualCount = accounts.length;
-    console.log(`Found ${actualCount} token accounts`);
+    // ═══════════════════════════════════════════════════════════════════
+    // PHASE 1: Get ALL token accounts
+    //   Paid: getProgramAccounts → ALL holders (200+), sorted by balance
+    //   Free: getTokenLargestAccounts → top ~20
+    // ═══════════════════════════════════════════════════════════════════
 
-    const holders = [];
-    const filteredEntities = [];  // exchanges, DEX, liquidity programs
-    console.log('Processing account details...');
-
-    // ── Enhanced: Use getMultipleAccounts for batch lookup (paid plan) ──
-    if (this.config.useBatchAccounts) {
-      console.log('  ⚡ Using getMultipleAccounts (batch mode)');
-      const addresses = accounts.map(a => a.address).filter(Boolean);
-      const amounts = new Map(accounts.map(a => [a.address, parseFloat(a.amount || '0')]));
-
+    if (this.config.useProgramAccounts) {
+      console.log('  ⚡ Using getProgramAccounts (full holder scan, paid plan)');
       try {
-        const batchResult = await this.rpc.call('getMultipleAccounts', [
-          addresses, { encoding: 'jsonParsed' },
+        // Fetch ALL token accounts for this mint using getProgramAccounts
+        // Filters: dataSize=165 (SPL Token Account), memcmp offset=0 (mint field)
+        const result = await this.rpc.call('getProgramAccounts', [
+          TOKEN_PROGRAM_ID,
+          {
+            filters: [
+              { dataSize: 165 },
+              { memcmp: { offset: 0, bytes: tokenMint } },
+            ],
+            encoding: 'jsonParsed',
+          },
         ]);
 
-        if (batchResult?.value) {
-          for (let i = 0; i < batchResult.value.length; i++) {
-            const acctData = batchResult.value[i];
-            const address = addresses[i];
-            const amount = amounts.get(address) || 0;
-            if (!acctData || amount <= 0) continue;
+        if (result && Array.isArray(result) && result.length > 0) {
+          console.log(`  📊 getProgramAccounts returned ${result.length} total token accounts`);
+          for (const entry of result) {
+            const info = entry.account?.data?.parsed?.info;
+            if (!info || !info.owner) continue;
+            const amount = parseFloat(info.tokenAmount?.amount || '0');
+            if (amount <= 0) continue;
+            rawAccounts.push({
+              tokenAccount: entry.pubkey,
+              owner: info.owner,
+              balance: amount,
+              decimals: info.tokenAmount?.decimals || 0,
+            });
+          }
 
-            const parsed = acctData.data?.parsed || {};
+          // Also check Token-2022 program
+          try {
+            const result2022 = await this.rpc.call('getProgramAccounts', [
+              TOKEN_2022_PROGRAM_ID,
+              {
+                filters: [
+                  { dataSize: 165 },
+                  { memcmp: { offset: 0, bytes: tokenMint } },
+                ],
+                encoding: 'jsonParsed',
+              },
+            ]);
+            if (result2022 && Array.isArray(result2022)) {
+              for (const entry of result2022) {
+                const info = entry.account?.data?.parsed?.info;
+                if (!info || !info.owner) continue;
+                const amount = parseFloat(info.tokenAmount?.amount || '0');
+                if (amount <= 0) continue;
+                rawAccounts.push({
+                  tokenAccount: entry.pubkey,
+                  owner: info.owner,
+                  balance: amount,
+                  decimals: info.tokenAmount?.decimals || 0,
+                });
+              }
+            }
+          } catch { /* Token-2022 not applicable for this mint */ }
+
+          // Sort by balance descending
+          rawAccounts.sort((a, b) => b.balance - a.balance);
+          console.log(`  📊 Total holders with balance > 0: ${rawAccounts.length}`);
+        }
+      } catch (err) {
+        console.log(`  ⚠️ getProgramAccounts failed (${err.message}), falling back to getTokenLargestAccounts`);
+        rawAccounts = [];
+      }
+    }
+
+    // Fallback: getTokenLargestAccounts (free plan or getProgramAccounts failure)
+    if (rawAccounts.length === 0) {
+      const largest = await this.rpc.call('getTokenLargestAccounts', [tokenMint]);
+      if (!largest || !largest.value || largest.value.length === 0) {
+        console.log('No token accounts found for this token');
+        return [];
+      }
+
+      const accounts = largest.value;
+      console.log(`Found ${accounts.length} token accounts (getTokenLargestAccounts max ~20)`);
+
+      // Resolve token accounts to owner wallets
+      if (this.config.useBatchAccounts) {
+        console.log('  ⚡ Using getMultipleAccounts (batch mode)');
+        const addresses = accounts.map(a => a.address).filter(Boolean);
+        const amounts = new Map(accounts.map(a => [a.address, parseFloat(a.amount || '0')]));
+
+        try {
+          const batchResult = await this.rpc.call('getMultipleAccounts', [
+            addresses, { encoding: 'jsonParsed' },
+          ]);
+
+          if (batchResult?.value) {
+            for (let i = 0; i < batchResult.value.length; i++) {
+              const acctData = batchResult.value[i];
+              const address = addresses[i];
+              const amount = amounts.get(address) || 0;
+              if (!acctData || amount <= 0) continue;
+
+              const parsed = acctData.data?.parsed || {};
+              const info = parsed.info || {};
+              const owner = info.owner;
+              if (!owner || owner.length < 32) continue;
+
+              const decimals = info.tokenAmount?.decimals || 0;
+              rawAccounts.push({ tokenAccount: address, owner, balance: amount, decimals });
+            }
+          }
+        } catch (err) {
+          console.log(`  ⚠️ getMultipleAccounts failed (${err.message}), falling back to sequential`);
+        }
+      }
+
+      // Sequential fallback
+      if (rawAccounts.length === 0) {
+        for (let i = 0; i < accounts.length; i++) {
+          try {
+            const accountInfo = accounts[i];
+            const address = accountInfo.address;
+            const amount = parseFloat(accountInfo.amount || '0');
+            if (!address || amount <= 0) continue;
+
+            const accountData = await this.rpc.call('getAccountInfo', [
+              address, { encoding: 'jsonParsed' },
+            ]);
+            if (!accountData || !accountData.value) continue;
+            const parsed = accountData.value?.data?.parsed || {};
             const info = parsed.info || {};
             const owner = info.owner;
             if (!owner || owner.length < 32) continue;
 
-            if (isLiquidityProgram(owner)) {
-              filteredEntities.push({ owner, type: 'LIQUIDITY', label: '🔄 Liquidity/DEX', balance: 0 });
-              continue;
-            }
-
-            const exchange = identifyExchange(owner);
-            if (exchange.isExchange) {
-              const decimals = info.tokenAmount?.decimals || 0;
-              const uiAmount = decimals > 0 ? amount / Math.pow(10, decimals) : amount;
-              filteredEntities.push({ owner, type: 'EXCHANGE', label: `🏦 ${exchange.name}`, balance: uiAmount });
-              continue;
-            }
-
             const decimals = info.tokenAmount?.decimals || 0;
-            const uiAmount = decimals > 0 ? amount / Math.pow(10, decimals) : amount;
-            holders.push({ owner, balance: uiAmount, tokenAccount: address });
-          }
+            rawAccounts.push({ tokenAccount: address, owner, balance: amount, decimals });
+
+            if ((i + 1) % 5 === 0) {
+              console.log(`  Processed ${i + 1}/${accounts.length} accounts...`);
+            }
+          } catch { continue; }
         }
-      } catch (err) {
-        console.log(`  ⚠️ getMultipleAccounts failed (${err.message}), falling back to sequential`);
-        // Fall through to sequential below
       }
+
+      rawAccounts.sort((a, b) => b.balance - a.balance);
     }
 
-    // ── Fallback: Sequential getAccountInfo (free plan or batch failure) ──
-    if (holders.length === 0 && filteredEntities.length === 0) {
-      for (let i = 0; i < accounts.length; i++) {
-        try {
-          const accountInfo = accounts[i];
-          const address = accountInfo.address;
-          const amount = parseFloat(accountInfo.amount || '0');
-          if (!address || amount <= 0) continue;
+    if (rawAccounts.length === 0) {
+      console.log('No token accounts resolved');
+      return [];
+    }
 
-          const accountData = await this.rpc.call('getAccountInfo', [
-            address, { encoding: 'jsonParsed' },
+    // ═══════════════════════════════════════════════════════════════════
+    // PHASE 2: Filter known static entities (exchanges, liquidity programs)
+    // ═══════════════════════════════════════════════════════════════════
+
+    const holders = [];
+    const filteredEntities = [];
+    const unknownOwners = []; // owners we need to PDA-check in Phase 3
+
+    for (const acct of rawAccounts) {
+      const { owner, balance, decimals, tokenAccount } = acct;
+
+      // Static check: known liquidity program
+      if (isLiquidityProgram(owner)) {
+        const uiAmount = decimals > 0 ? balance / Math.pow(10, decimals) : balance;
+        const label = getEntityLabel(owner) || '🔄 Liquidity/DEX';
+        filteredEntities.push({ owner, type: 'LIQUIDITY', label, balance: uiAmount });
+        continue;
+      }
+
+      // Static check: known exchange
+      const exchange = identifyExchange(owner);
+      if (exchange.isExchange) {
+        const uiAmount = decimals > 0 ? balance / Math.pow(10, decimals) : balance;
+        filteredEntities.push({ owner, type: 'EXCHANGE', label: `🏦 ${exchange.name}`, balance: uiAmount });
+        continue;
+      }
+
+      const uiAmount = decimals > 0 ? balance / Math.pow(10, decimals) : balance;
+      holders.push({ owner, balance: uiAmount, tokenAccount });
+      unknownOwners.push(owner);
+    }
+
+    console.log(`  Static filter: ${filteredEntities.length} known entities removed, ${holders.length} remaining`);
+
+    // ═══════════════════════════════════════════════════════════════════
+    // PHASE 3: Dynamic PDA Detection — check wallet program ownership
+    //   If wallet.owner !== System Program → it's a PDA (DEX/liquidity)
+    //   This catches ALL Pump.fun bonding curves, Raydium pools, etc.
+    // ═══════════════════════════════════════════════════════════════════
+
+    if (this.config.detectProgramOwned && unknownOwners.length > 0) {
+      console.log(`  🔎 Detecting program-owned wallets (PDA check on ${unknownOwners.length} wallets)...`);
+
+      const pdaDetected = new Map(); // owner → { programId, label }
+
+      // Batch check in chunks of 100 using getMultipleAccounts
+      const BATCH_SIZE = 100;
+      const uniqueOwners = [...new Set(unknownOwners)];
+
+      for (let i = 0; i < uniqueOwners.length; i += BATCH_SIZE) {
+        const batch = uniqueOwners.slice(i, i + BATCH_SIZE);
+        try {
+          const batchResult = await this.rpc.call('getMultipleAccounts', [
+            batch, { encoding: 'jsonParsed' },
           ]);
 
-          if (!accountData || !accountData.value) continue;
-          const parsed = accountData.value?.data?.parsed || {};
-          const info = parsed.info || {};
-          const owner = info.owner;
+          if (batchResult?.value) {
+            for (let j = 0; j < batchResult.value.length; j++) {
+              const acctInfo = batchResult.value[j];
+              const walletAddr = batch[j];
+              if (!acctInfo) continue;
 
-          if (!owner) continue;
-          if (owner.length < 32) continue;
+              const ownerProgram = acctInfo.owner;
+              if (!ownerProgram) continue;
 
-          if (isLiquidityProgram(owner)) {
-            filteredEntities.push({ owner, type: 'LIQUIDITY', label: '🔄 Liquidity/DEX', balance: 0 });
-            continue;
+              // System Program = real user wallet → skip
+              if (isUserWallet(ownerProgram)) continue;
+
+              // Not System Program → this is a PDA
+              const programLabel = getProgramLabel(ownerProgram);
+              const label = programLabel || `🤖 PDA (${ownerProgram.slice(0, 8)}...)`;
+              pdaDetected.set(walletAddr, { programId: ownerProgram, label });
+            }
           }
-
-          const exchange = identifyExchange(owner);
-          if (exchange.isExchange) {
-            const decimals = info.tokenAmount?.decimals || 0;
-            const uiAmount = decimals > 0 ? amount / Math.pow(10, decimals) : amount;
-            filteredEntities.push({ owner, type: 'EXCHANGE', label: `🏦 ${exchange.name}`, balance: uiAmount });
-            continue;
-          }
-
-          const decimals = info.tokenAmount?.decimals || 0;
-          const uiAmount = decimals > 0 ? amount / Math.pow(10, decimals) : amount;
-
-          holders.push({ owner, balance: uiAmount, tokenAccount: address });
-
-          if ((i + 1) % 5 === 0) {
-            console.log(`  Processed ${i + 1}/${actualCount} accounts...`);
-          }
-        } catch {
-          continue;
+        } catch (err) {
+          console.log(`  ⚠️ PDA batch check failed: ${err.message}`);
         }
+      }
+
+      if (pdaDetected.size > 0) {
+        console.log(`  🎯 Detected ${pdaDetected.size} program-owned wallets (PDAs):`);
+        for (const [addr, info] of pdaDetected) {
+          console.log(`     ↳ ${info.label}: ${addr.slice(0, 16)}...`);
+        }
+
+        // Move PDA wallets from holders to filteredEntities
+        const newHolders = [];
+        for (const holder of holders) {
+          const pdaInfo = pdaDetected.get(holder.owner);
+          if (pdaInfo) {
+            filteredEntities.push({
+              owner: holder.owner,
+              type: 'PDA',
+              label: pdaInfo.label,
+              balance: holder.balance,
+              programId: pdaInfo.programId,
+            });
+          } else {
+            newHolders.push(holder);
+          }
+        }
+        holders.length = 0;
+        holders.push(...newHolders);
       }
     }
 
     if (filteredEntities.length > 0) {
-      console.log(`🔍 Filtered out ${filteredEntities.length} known entities (exchanges/DEX/liquidity)`);
+      console.log(`🔍 Total filtered: ${filteredEntities.length} non-human entities`);
       for (const ent of filteredEntities) {
-        console.log(`   ↳ ${ent.label}: ${ent.owner.slice(0, 16)}...`);
+        console.log(`   ↳ ${ent.label}${ent.balance > 0 ? ` — ${ent.balance.toLocaleString('en-US', { maximumFractionDigits: 0 })} tokens` : ''}`);
       }
     }
 
     if (holders.length === 0) return { holders: [], filteredEntities };
-    console.log(`After filtering: ${holders.length} valid holders`);
+    console.log(`After filtering: ${holders.length} valid human holders`);
 
     holders.sort((a, b) => b.balance - a.balance);
     const topHolders = holders.slice(0, limit);
@@ -1107,12 +1263,13 @@ export class HolderAnalyzer {
     lines.push('└' + '─'.repeat(78) + '┘');
     lines.push('');
 
-    // ── FILTERED ENTITIES (compact) ──
+    // ── FILTERED ENTITIES (compact — names only, no raw addresses) ──
     if (filteredEntities && filteredEntities.length > 0) {
       lines.push('🔍 FILTERED (excluded from analysis):');
       for (const ent of filteredEntities) {
         const balStr = ent.balance > 0 ? ` — ${ent.balance.toLocaleString('en-US', { minimumFractionDigits: 0 })} tokens` : '';
-        lines.push(`   ${ent.label}: ${ent.owner}${balStr}`);
+        // Show label/name ONLY — no wallet address (user requested)
+        lines.push(`   ${ent.label}${balStr}`);
       }
       lines.push('');
     }

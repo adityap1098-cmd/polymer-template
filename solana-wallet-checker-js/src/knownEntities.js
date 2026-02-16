@@ -151,6 +151,59 @@ export const UNIVERSAL_TOKENS = new Set([
   '11111111111111111111111111111111',
 ]);
 
+// ─── KNOWN PROGRAM IDs → LABELS ────────────────────────────────────────────
+// Maps on-chain program owner IDs to human-readable labels.
+// Used for DYNAMIC PDA detection: if a wallet's owner is one of these programs,
+// it's a Program Derived Address (liquidity pool, bonding curve, etc.).
+//
+// Key insight: user wallets are owned by System Program (1111...111).
+// Any wallet owned by a different program = PDA = not a human holder.
+
+export const SYSTEM_PROGRAM_ID = '11111111111111111111111111111111';
+
+export const KNOWN_PROGRAM_LABELS = new Map([
+  // ── Pump.fun ──
+  ['6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P', '🐸 Pump.fun Bonding Curve'],
+  ['39azUYFWPz3VHgKCf3VChUwbpURdCHRxjWVowf5jUJjg', '🐸 Pump.fun Program'],
+  ['BSfD6SHZigAfDWSjzD5Q41jw8LmKwtmjskPH9oYFa2Bh', '🐸 Pump.fun Migration'],
+  ['Ce6TQqeHC9p8KetsN6JsjHK7UTZk7nasjjnr7XxXp18W', '🐸 Pump.fun Fee'],
+  ['CebN5WGQ4jvEPvsVU4EoHEpgzq1VV7AbCJ9BSKKbV14p', '🐸 Pump.fun Auth'],
+
+  // ── Raydium ──
+  ['675kPX9MHTjS2zt1qfr1NYHuzeLXfQM9H24wFSUt1Mp8', '💧 Raydium AMM V4'],
+  ['CAMMCzo5YL8w4VFF8KVHrK22GGUsp5VTaW7grrKgrWqK', '💧 Raydium CLMM'],
+  ['routeUGWgWzqBWFcrCfv8tritsqukccJPu3q5GPP3xS',  '💧 Raydium Route'],
+  ['FarmqiPv5eAj3j1GMdMCMUGXqPUvmquZtMy86QH6rzhG', '💧 Raydium Farms'],
+  ['5Q544fKrFoe6tsEbD7S8EmxGTJYAKtTVhAW5Q5pge4j1', '💧 Raydium Authority'],
+
+  // ── Orca ──
+  ['whirLbMiicVdio4qvUfM5KAg6Ct8VwpYzGff3uctyCc', '🌊 Orca Whirlpool'],
+  ['9W959DqEETiGZocYWCQPaJ6sBmUzgfxXfqGeTEdp3aQP', '🌊 Orca V1'],
+  ['DjVE6JNiYqPL2QXyCUUh8rNjHrbz9hXHNYt99MQ59qw1', '🌊 Orca V2'],
+
+  // ── Jupiter ──
+  ['JUP6LkbZbjS1jKKwapdHNy74zcZ3tLUZoi5QNyVTaV4', '⚡ Jupiter V6'],
+  ['JUP4Fb2cqiRUcaTHdrPC8h2gNsA2ETXiPDD33WcGuJB', '⚡ Jupiter V4'],
+  ['JUP2jxvXaqu7NQY1GmNF4m1vodw12LVXYxbFL2uN9CFi', '⚡ Jupiter V2'],
+
+  // ── Meteora ──
+  ['LBUZKhRxPF3XUpBCjp4YzTKgLccjZhTSDM9YuVaPwxo', '🌀 Meteora DLMM'],
+  ['Eo7WjKq67rjJQSZxS6z3YkapzY3eMj6Xy8X5EQVn5UaB', '🌀 Meteora Pools'],
+
+  // ── Phoenix / OpenBook / Serum ──
+  ['PhoeNiXZ8ByJGLkxNfZRnkUfjvmuYqLR89jjFHGqdXY', '🔥 Phoenix DEX'],
+  ['srmqPvymJeFKQ4zGQed1GFppgkRHL9kaELCbyksJtPX', '📖 Serum V3'],
+  ['opnb2LAfJYbRMAHHvqjCwQxanZn7ReEHp1k81EohpZb', '📖 OpenBook V2'],
+
+  // ── Marinade ──
+  ['MarBmsSgKXdrN1egZf5sqe1TMai9K1rChYNDJgjq7aD', '🏔️ Marinade Staking'],
+
+  // ── Token Programs ──
+  ['TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA', '🔑 Token Program'],
+  ['TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb', '🔑 Token-2022'],
+  ['ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL', '🔑 Associated Token'],
+]);
+
 // ─── HELPER FUNCTIONS ──────────────────────────────────────────────────────
 
 /**
@@ -180,6 +233,26 @@ export function isLiquidityProgram(address) {
  */
 export function isUniversalToken(mint) {
   return UNIVERSAL_TOKENS.has(mint);
+}
+
+/**
+ * Get the human-readable label for a known program (by its program ID).
+ * Used for dynamic PDA detection — identifies what program owns a wallet.
+ * @param {string} programId - The program that owns the account
+ * @returns {string|null} Human label or null if unknown
+ */
+export function getProgramLabel(programId) {
+  return KNOWN_PROGRAM_LABELS.get(programId) || null;
+}
+
+/**
+ * Check if an account is a user wallet (owned by System Program)
+ * vs a Program Derived Address (owned by any other program).
+ * @param {string} ownerProgram - The .owner field from getAccountInfo
+ * @returns {boolean} true if user wallet, false if PDA
+ */
+export function isUserWallet(ownerProgram) {
+  return ownerProgram === SYSTEM_PROGRAM_ID;
 }
 
 /**
