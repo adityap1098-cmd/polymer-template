@@ -540,7 +540,7 @@ export class InsiderDetector {
     const holderMap = new Map(holders.map(h => [h.owner, h]));
 
     /** Shorten address */
-    const sh = (addr) => addr && addr.length >= 12 ? addr.slice(0, 6) + '...' + addr.slice(-4) : (addr || '?');
+    const sh = (addr) => addr || '?';
     /** Bubble char */
     const bc = (pct) => pct >= 5 ? '⬤' : pct >= 1 ? '◉' : pct >= 0.5 ? '●' : '○';
 

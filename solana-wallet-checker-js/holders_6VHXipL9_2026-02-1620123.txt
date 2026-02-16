@@ -1,0 +1,298 @@
+
+╔══════════════════════════════════════════════════════════════════════════════╗
+║  TOKEN HOLDER RISK ANALYSIS                                                  ║
+╚══════════════════════════════════════════════════════════════════════════════╝
+  Token:  6VHXipL9pSV5MCYuB9tMR4xkwojhc1gQ51ku2GR7pump
+  Date:   2026-02-16 20:12:23 UTC
+
+┌──────────────────────────────────────────────────────────────────────────────┐
+│  ⚡ QUICK VERDICT                                                            │
+├──────────────────────────────────────────────────────────────────────────────┤
+│  Overall:   🟢 LOW RISK (23/100)
+│  Holders:   50 analyzed, 3 filtered (exchanges/DEX/bots)
+│  Gini:      0.36 — well distributed
+│  Top 5:     16.17% of supply
+│  Fresh:     17/50 wallets ≤7 days old (34%)
+│  Sybil:     4 cluster(s) — 14 wallets control 7.01%
+│  Similar:   3 group(s) — 30 wallets share trading patterns (23.18%)
+│
+│  📋 ✅ LOW RISK — Distribusi holder terlihat normal.
+└──────────────────────────────────────────────────────────────────────────────┘
+
+🔍 FILTERED (excluded from analysis):
+   🐸 Pump.fun AMM — 72,517,631.575 tokens
+   🌀 Meteora DLMM — 44,566,420.073 tokens
+   🌀 Meteora DLMM — 7,100,945.071 tokens
+
+  ███████████████░░░░░░░░░░░░░░░ 49.1% of supply analyzed
+  📊 Risk: 🔴 0 Critical | 🟠 0 High | 🟡 15 Medium | 🟢 35 Low
+
+╔══════════════════════════════════════════════════════════════════════════════╗
+║  🗺️  BUBBLE MAP — Holder Connections                                         ║
+╚══════════════════════════════════════════════════════════════════════════════╝
+  Legend: ⬤ >5%  ◉ 1-5%  ● 0.5-1%  ○ <0.5%    Risk: 🔴≥70  🟠≥50  🟡≥30  🟢<30
+
+  ── CLUSTER A: 🏦 🤖 Sniper MEV Bot ── 3.51% supply ──
+  │
+  ├── ● 0.67%   E13hUc...EET4  🟢22
+  ├── ● 0.62%   9LNQCi...eTn3  🟢22
+  ├── ● 0.61%   AUNWv5...TPyN  🟡33
+  ├── ● 0.57%   33wpnZ...E8nm  🟡35
+  ├── ● 0.54%   3YNcxt...BB3N  🟢22
+  └── ● 0.50%   4GeWkW...Zii6  🟡30
+
+  ── CLUSTER B: 🏦 ⚡ BoostLegends VolumeBot ── 2.28% supply ──
+  │
+  ├── ◉ 1.18%   5wh2E3...V7UD  🟡38
+  ├── ● 0.65%   9PNrgp...Yk4c  🟡34
+  └── ○ 0.45%   78qsLb...E4CM  🟢8
+
+  ── CLUSTER C: pohJj8...5vuW ── 1.74% supply ──
+  │
+  ├── ● 0.67%   E13hUc...EET4  🟢22
+  ├── ● 0.57%   33wpnZ...E8nm  🟡35
+  └── ● 0.50%   4GeWkW...Zii6  🟡30
+
+  ── CLUSTER D: Bpv6Pj...7aiY ── 1.22% supply ──
+  │
+  ├── ● 0.78%   AmNMqM...Q7LB  🟢20
+  └── ○ 0.44%   FhC1Xq...oKcY  🟢22
+
+  ── SIMILAR #1: J=0.027 🟡 MODERATE ── 19.55% supply ──
+  │
+  ├── ◉ 2.04%   4HNJBu...X7BL  🟡48
+  ├── ◉ 1.77%   BC8yiF...Z9TW  🟢14
+  ├── ◉ 1.22%   7YndBV...9fTg  🟢26
+  ├── ◉ 1.06%   E4Rued...dv5S  🟢14
+  ├── ◉ 1.00%   FBy5Vh...wRjg  🟢14
+  ├── ● 0.78%   BKYYNo...Cu6i  🟢26
+  ├── ● 0.75%   AU8NR5...4v8R  🟢26
+  ├── ● 0.72%   8bjDh7...tbf3  🟢21
+  ├── ● 0.71%   FY6uaU...jpP3  🟢14
+  ├── ● 0.68%   7a4Tga...RkgS  🟢20
+  ├── ● 0.67%   E13hUc...EET4  🟢22 *
+  ├── ● 0.66%   42YjYW...ohH5  🟡31
+  ├── ● 0.65%   9PNrgp...Yk4c  🟡34 *
+  ├── ● 0.64%   AyGisH...XZgZ  🟢14
+  ├── ● 0.62%   9LNQCi...eTn3  🟢22 *
+  ├── ● 0.61%   AUNWv5...TPyN  🟡33 *
+  ├── ● 0.59%   GYaH5f...eF84  🟢21
+  ├── ● 0.54%   3YNcxt...BB3N  🟢22 *
+  ├── ● 0.52%   Dox2Wn...nXr6  🟢14
+  ├── ● 0.51%   GBYUwM...UBjV  🟢19
+  ├── ○ 0.50%   Aq4uda...H4GZ  🟢14
+  ├── ○ 0.49%   6VuQKD...3SfD  🟢14
+  ├── ○ 0.48%   CQqPAQ...t95E  🟢19
+  ├── ○ 0.47%   6Q3iMk...JrSZ  🟢14
+  ├── ○ 0.44%   FhC1Xq...oKcY  🟢22 *
+  └── ○ 0.44%   DrHTJb...t4FF  🟢14
+
+  ── SIMILAR #2: J=0.313 🟡 MODERATE, 5 shared tokens ── 2.26% supply ──
+  │
+  ├── ◉ 1.18%   5wh2E3...V7UD  🟡38 *
+  └── ◉ 1.07%   24YUmy...L2fD  🟢24
+
+  ── SIMILAR #3: J=0.222 🟡 MODERATE, 28 shared tokens ── 1.37% supply ──
+  │
+  ├── ● 0.88%   BNwVdu...zvsR  🟡46
+  └── ○ 0.49%   E35uoE...GaFs  🟡37
+
+  ── UNLINKED (16 wallets, 23.66%) ──
+  │
+  ├── ⬤ 8.33%   88DUfV...XPLk  🟢26
+  ├── ◉ 2.10%   HyqngV...Xdgk  🟢19
+  ├── ◉ 1.93%   3zpN7Q...ip2Q  🟢12
+  ├── ◉ 1.57%   HLhchd...PeXb  🟡35
+  ├── ◉ 1.54%   Hugksx...x6Yh  🟢28
+  └── ... 11 more (8.19%)
+
+════════════════════════════════════════════════════════════════════════════════
+  🚨 TOP RISK HOLDERS (11 with Score ≥ 35)
+════════════════════════════════════════════════════════════════════════════════
+
+  #1  🟡 48/100  4HNJBuudwfj2n8wKnmbC47j2wzCeuR23MYrwGMzqX7BL
+      20,425,894 tokens (2.04%) | Age: 20d | 70 tokens (1 held)
+      ⚠️  Very low diversity: 1 tokens (12pts) · 📈 Notable holder: 2.04% (7pts) · ⚠️  Moderate coordination: J=0.03, 26 wallets (14pts) · 📅 Young wallet: 20 days old (5pts) · 🔍 Whale with no trading history (10pts)
+
+  #2  🟡 46/100  BNwVduQq1AH3ee5hnLQtbJmPyrBJHaS29b6VQt3pzvsR
+      8,817,483 tokens (0.88%) | Age: 3d | 68 tokens (1 held)
+      ⚠️  Very low diversity: 1 tokens (12pts) · ⚠️  Moderate coordination: J=0.22, 2 wallets (14pts) · 📅 Very young wallet: 3 days old (10pts) · 🔍 Whale with no trading history (10pts)
+
+  #3  🟡 45/100  Kaemfa3FSuLaHeEYkVfEegy3MBkFWtUsYZUpS4mzXDz
+      10,822,265 tokens (1.08%) | Age: 1d | 0 tokens (0 held)
+      Entry: 0.00000631 SOL/token (3 SOL spent)
+      ❌ No trading history (15pts) · 🆕 Brand new wallet: 1 day(s) old (15pts) · 🎯 Funded 1min before purchase (5pts) · 🔍 Whale with no trading history (10pts)
+
+  #4  🟡 45/100  J6yvsvdUfuHi3dVNUDKEnHyhSs2vCFV18nPDfaXfqMe9
+      4,783,747 tokens (0.48%) | Age: 1d | 0 tokens (0 held)
+      Entry: 0.00000523 SOL/token (25 SOL spent)
+      ❌ No trading history (15pts) · 🆕 Brand new wallet: 1 day(s) old (15pts) · 🎯 Funded 0min before purchase (5pts) · 🔍 Whale with no trading history (10pts)
+
+  #5  🟡 38/100  5wh2E3oaSdbGkts8MzhXsC7bZ6hfiKmeWPJ1scXXV7UD
+      11,834,282 tokens (1.18%) | Age: 6d | 9 tokens (5 held)
+      📊 Limited diversity: 5 tokens (6pts) · ⚠️  Moderate coordination: J=0.31, 2 wallets (14pts) · 📅 Very young wallet: 6 days old (10pts) · 💰 Same funder as 2 other holder(s) (8pts)
+
+  #6  🟡 37/100  53akttNRNbMoFeFvtS5qjmJMrHiBio24fm22xa3FujU1
+      9,351,080 tokens (0.94%) | Age: 1d | 6 tokens (1 held)
+      ⚠️  Very low diversity: 1 tokens (12pts) · 🆕 Brand new wallet: 1 day(s) old (15pts) · 🔍 Whale with no trading history (10pts)
+
+  #7  🟡 37/100  Ez2jYoXp45DZxr7JVhiqbDNirgBT37MErjZGxA8jZkTf
+      6,092,162 tokens (0.61%) | Age: 1d | 14 tokens (1 held)
+      ⚠️  Very low diversity: 1 tokens (12pts) · 🆕 Brand new wallet: 1 day(s) old (15pts) · 🔍 Whale with no trading history (10pts)
+
+  #8  🟡 37/100  E35uoEGT6mR2ae94KNuSfk4X86y7bcNeomDNV4T7GaFs
+      4,898,582 tokens (0.49%) | Age: 2d | 86 tokens (4 held)
+      📊 Limited diversity: 4 tokens (6pts) · ⚠️  Moderate coordination: J=0.22, 2 wallets (14pts) · 📅 Very young wallet: 2 days old (10pts) · 🤖 Bot-like activity: 1222.49 tx/day (7pts)
+
+  #9  🟡 35/100  HLhchdLorTK5tDEYiHrpNoM9TwjkQT15a4TPsqk1PeXb
+      15,692,376 tokens (1.57%) | Age: 2d | 15 tokens (0 held)
+      ❌ No trading history (15pts) · 📅 Very young wallet: 2 days old (10pts) · 🔍 Whale with no trading history (10pts)
+
+  #10  🟡 35/100  33wpnZr2X4hZbmspfnGQ7xCnfFqqxgkRrFXQtw2vE8nm
+      5,657,628 tokens (0.57%) | Age: 15d | 14 tokens (1 held)
+      ⚠️  Very low diversity: 1 tokens (12pts) · 📅 Young wallet: 15 days old (5pts) · 💰 Same funder as 5 other holder(s) (8pts) · 🔍 Whale with no trading history (10pts)
+
+  #11  🟡 35/100  8R9bfX9XtJEMGnLkyBtmgsZMQ4b6pwsb2o3V7UYdgzsJ
+      5,451,129 tokens (0.55%) | Age: 7d | 24 tokens (0 held)
+      ❌ No trading history (15pts) · 📅 Very young wallet: 7 days old (10pts) · 🔍 Whale with no trading history (10pts)
+
+────────────────────────────────────────────────────────────────────────────────
+  OTHER (39 holders, Score < 35)
+────────────────────────────────────────────────────────────────────────────────
+  Score │ Supply │  Age │ Wallet
+  ──────┼────────┼──────┼──────────────────────────────────────────────────
+     34 │  0.65% │  10d │ 9PNrgp...Yk4c
+     33 │  0.61% │  26d │ AUNWv5...TPyN
+     31 │  0.66% │   5d │ 42YjYW...ohH5
+     30 │  0.50% │   5d │ 4GeWkW...Zii6
+     28 │  1.54% │   1d │ Hugksx...x6Yh
+     26 │  8.33% │   8d │ 88DUfV...XPLk
+     26 │  1.22% │  25d │ 7YndBV...9fTg
+     26 │  0.78% │  22d │ BKYYNo...Cu6i
+     26 │  0.75% │  41d │ AU8NR5...4v8R
+     24 │  1.07% │   5d │ 24YUmy...L2fD
+     22 │  0.99% │   1d │ nya666...4qpT
+     22 │  0.67% │  80d │ E13hUc...EET4
+     22 │  0.62% │ 150d │ 9LNQCi...eTn3
+     22 │  0.54% │ 292d │ 3YNcxt...BB3N
+     22 │  0.44% │ 167d │ FhC1Xq...oKcY
+     21 │  0.72% │  31d │ 8bjDh7...tbf3
+     21 │  0.59% │  32d │ GYaH5f...eF84
+     20 │  0.78% │  17d │ AmNMqM...Q7LB
+     20 │  0.68% │ 154d │ 7a4Tga...RkgS
+     19 │  2.10% │  20d │ HyqngV...Xdgk
+     19 │  0.51% │  24d │ GBYUwM...UBjV
+     19 │  0.48% │  29d │ CQqPAQ...t95E
+     17 │  0.99% │   4d │ DB6qhf...TShf
+     16 │  0.81% │   6d │ 7CUR3V...K3gk
+     14 │  1.77% │  91d │ BC8yiF...Z9TW
+     14 │  1.06% │ 425d │ E4Rued...dv5S
+     14 │  1.00% │ 791d │ FBy5Vh...wRjg
+     14 │  0.71% │  59d │ FY6uaU...jpP3
+     14 │  0.64% │ 351d │ AyGisH...XZgZ
+     14 │  0.52% │ 378d │ Dox2Wn...nXr6
+     14 │  0.50% │  87d │ Aq4uda...H4GZ
+     14 │  0.49% │ 122d │ 6VuQKD...3SfD
+     14 │  0.47% │  93d │ 6Q3iMk...JrSZ
+     14 │  0.44% │ 197d │ DrHTJb...t4FF
+     12 │  1.93% │  11d │ 3zpN7Q...ip2Q
+     10 │  0.61% │   3d │ 2xd2GK...G73Z
+      8 │  0.45% │  84d │ 78qsLb...E4CM
+      6 │  0.45% │ 648d │ HMk188...vHxW
+      0 │  0.70% │  71d │ CKuBNH...zCY2
+
+════════════════════════════════════════════════════════════════════════════════
+  491,378,458 / 999,999,457 tokens (49.1%) across 50 holders
+════════════════════════════════════════════════════════════════════════════════
+
+╔══════════════════════════════════════════════════════════════════════════════╗
+║  🕵️  INSIDER / TEAM DETECTION                                                ║
+╚══════════════════════════════════════════════════════════════════════════════╝
+
+  📊 3 grup — 33 wallets — 25.10% supply
+
+  ┌──── GRUP #1 🟡 DICURIGAI TERKAIT (30/100) ── 29 wallets, 21.40% ────
+  │  💰 Didanai dari sumber yang sama (pohJj8FSmifd..., Bpv6PjZ3zRbz...) — 25pts
+  │  👥 Grup besar: 29 wallet — 5pts
+  │
+  │  ◉ 2.04%   4HNJBu...X7BL  Age:20d   Risk:48
+  │  ◉ 1.77%   BC8yiF...Z9TW  Age:91d   Risk:14
+  │  ◉ 1.22%   7YndBV...9fTg  Age:25d   Risk:26
+  │  ◉ 1.06%   E4Rued...dv5S  Age:425d  Risk:14
+  │  ◉ 1.00%   FBy5Vh...wRjg  Age:791d  Risk:14
+  │  ... +24 wallets (14.30%)
+  │  💰 Funder: pohJj8...5vuW, Bpv6Pj...7aiY
+  └────────────────────────────────────────────────────────────────────────────
+
+  ┌──── GRUP #2 ⚪ KONEKSI LEMAH (15/100) ── 2 wallets, 2.30% ────
+  │  🟡 Token overlap moderate (J=0.31, 5 shared) — 15pts
+  │
+  │  ◉ 1.18%   5wh2E3...V7UD  Age:6d    Risk:38
+  │  ◉ 1.07%   24YUmy...L2fD  Age:5d    Risk:24
+  └────────────────────────────────────────────────────────────────────────────
+
+  ┌──── GRUP #3 ⚪ KONEKSI LEMAH (15/100) ── 2 wallets, 1.40% ────
+  │  🟡 Token overlap moderate (J=0.22, 10 shared) — 15pts
+  │
+  │  ● 0.88%   BNwVdu...zvsR  Age:3d    Risk:46
+  │  ○ 0.49%   E35uoE...GaFs  Age:2d    Risk:37
+  └────────────────────────────────────────────────────────────────────────────
+
+╔══════════════════════════════════════════════════════════════════════════════╗
+║  💰 FUNDING CHAIN                                                            ║
+╚══════════════════════════════════════════════════════════════════════════════╝
+
+  Traced: 39/50 | Unknown: 11 | Known entity: 7
+
+  ── FROM KNOWN ENTITIES ──────────────────────────────────────────────────────
+  🏦 🤖 Sniper MEV Bot (po27vz...ejFB)  6 wallets, 3.51%
+    ├── ● 0.667%  E13hUc...EET4 via pohJj8...5vuW  [02-16 00:30] 0.00 SOL
+    ├── ● 0.618%  9LNQCi...eTn3  [02-13 17:19] 0.00 SOL
+    ├── ● 0.613%  AUNWv5...TPyN  [02-15 16:43] 0.00 SOL
+    ├── ● 0.566%  33wpnZ...E8nm via pohJj8...5vuW  [02-15 17:06] 0.00 SOL
+    ├── ● 0.540%  3YNcxt...BB3N  [02-15 17:36] 0.00 SOL
+    └── ● 0.503%  4GeWkW...Zii6 via pohJj8...5vuW  [02-16 01:46] 0.00 SOL
+
+  🏦 ⚡ BoostLegends VolumeBot (5Z84wi...9WGF)  3 wallets, 2.28%
+    ├── ◉ 1.18%   5wh2E3...V7UD  [02-16 09:49] 0.00 SOL
+    ├── ● 0.647%  9PNrgp...Yk4c  [02-16 19:02] 0.00 SOL
+    └── ○ 0.451%  78qsLb...E4CM  [02-16 09:12] 0.00 SOL
+
+  🏦 Binance (5tzFki...uAi9)  1 wallet, 1.08%
+    └── ◉ 1.08%   Kaemfa...zXDz  [02-16 19:18] 73.94 SOL
+
+  Shared funder (Bpv6Pj...7aiY)  2 wallets, 1.22%
+    ├── ● 0.778%  AmNMqM...Q7LB  [02-16 18:47] 1.40 SOL
+    └── ○ 0.443%  FhC1Xq...oKcY  [02-16 18:44] 11.61 SOL
+
+  ── 🎯 SNIPERS (funded ≤1hr before buy) ──────────────────────────────────────
+  ◉ 1.08%   Kaemfa...zXDz ← 5tzFki...uAi9 (exchange)  73.94 SOL, 1min before buy
+  ○ 0.478%  J6yvsv...qMe9 ← BxEpKH...eJDD  25.04 SOL, 0min before buy
+
+  ── FROM UNIQUE WALLETS (27) ──────────────────────────────────────────────
+  ⬤ 8.33%   88DUfV...XPLk ← 32BUuh...NrCC  [02-16 19:09] 3.38 SOL
+  ◉ 2.10%   HyqngV...Xdgk ← mhfHVT...oBtT  [02-16 15:12] 0.57 SOL
+  ◉ 2.04%   4HNJBu...X7BL ← C4xzqe...jUpx  [02-16 19:33] 3.85 SOL
+  ◉ 1.77%   BC8yiF...Z9TW ← ENuLTc...b6az  [02-16 03:40] 0.00 SOL
+  ◉ 1.06%   E4Rued...dv5S ← 5GZfSH...vpea  [02-15 16:08] 0.00 SOL
+  ... +22 lainnya
+
+  ── UNKNOWN ORIGIN (11 wallets) ──────────────────────────────────────────
+  ◉ 1.93% 3zpN7Q...ip2Q | ◉ 1.57% HLhchd...PeXb | ◉ 1.54% Hugksx...x6Yh | ◉ 1.22% 7YndBV...9fTg | ◉ 1.07% 24YUmy...L2fD | ● 0.696% CKuBNH...zCY2
+  ... +5 lainnya
+
+════════════════════════════════════════════════════════════════════════════════
+╔══════════════════════════════════════════════════════════════════════════════╗
+║  💰 ANALISIS HARGA MASUK & PnL                                                ║
+╚══════════════════════════════════════════════════════════════════════════════╝
+  Current Price:  0.00000343 SOL ($2.90e-4)
+  SOL Price:      $84.58
+  Dianalisis:     2/50 holder (harga masuk terdeteksi)
+
+  📉 HOLDER RUGI — 2 wallet sedang merugi
+  ──────────────────────────────────────────────────────────────────────────
+  -34.4%     | Entry: 0.00000523       | J6yvsvdUfuHi3dVNUDKEnHyhSs2vCFV18nPDfaXfqMe9
+  -45.7%     | Entry: 0.00000631       | Kaemfa3FSuLaHeEYkVfEegy3MBkFWtUsYZUpS4mzXDz
+
+  ──────────────────────────────────────────────────────────────────────────
+  Ringkasan: 0 profit | 2 rugi | 0 early buyer | 0 cross-ref alert

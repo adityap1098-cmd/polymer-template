@@ -34,10 +34,9 @@ function fmtPct(pct) {
   return '0%';
 }
 
-/** Shorten a Solana address for display: first 6 + last 4 */
+/** Return full wallet address for display */
 function shortAddr(addr) {
-  if (!addr || addr.length < 12) return addr || '?';
-  return addr.slice(0, 6) + '...' + addr.slice(-4);
+  return addr || '?';
 }
 
 /** Bubble size character based on supply percentage */

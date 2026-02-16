@@ -347,7 +347,7 @@ export class FundingAnalyzer {
    */
   formatFundingOutput(analysis, holders, totalSupply = 0) {
     const lines = [];
-    const sh = (addr) => addr && addr.length >= 12 ? addr.slice(0, 6) + '...' + addr.slice(-4) : (addr || '?');
+    const sh = (addr) => addr || '?';
     const bc = (pct) => pct >= 5 ? '⬤' : pct >= 1 ? '◉' : pct >= 0.5 ? '●' : '○';
     const fp = (n) => n >= 10 ? n.toFixed(1) + '%' : n >= 1 ? n.toFixed(2) + '%' : n.toFixed(3) + '%';
     const totalBalance = holders.reduce((s, h) => s + h.balance, 0);
