@@ -125,11 +125,14 @@ export function extractEntryPriceFromTx(tx, wallet, tokenMint) {
   };
 }
 
-// ─── Jupiter Price Fetcher ──────────────────────────────────────────────────
+// ─── Price Fetcher (Multi-source: DexScreener → Jupiter fallback) ───────────
 
 /**
- * Get current token price from Jupiter Price API v2.
- * Free, no authentication required.
+ * Get current token price.
+ *
+ * Sources (tried in order):
+ * 1. DexScreener /tokens/v1 — free, no auth, returns priceUsd for any Solana pair
+ * 2. Jupiter Price API v2 — may require API key in some regions
  *
  * Returns prices in USD. Also fetches SOL price for conversion.
  *
@@ -137,36 +140,127 @@ export function extractEntryPriceFromTx(tx, wallet, tokenMint) {
  * @returns {Promise<object|null>} { priceUSD, solPriceUSD, priceSOL }
  */
 export async function getCurrentPrice(tokenMint) {
+  // ── Source 1: DexScreener (free, reliable) ──
   try {
-    const url = `https://api.jup.ag/price/v2?ids=${tokenMint},${SOL_MINT}`;
-    const response = await fetch(url, {
+    const result = await _fetchDexScreenerPrice(tokenMint);
+    if (result) return result;
+  } catch { /* fall through */ }
+
+  // ── Source 2: Jupiter Price API v2 (fallback) ──
+  try {
+    const result = await _fetchJupiterPrice(tokenMint);
+    if (result) return result;
+  } catch { /* fall through */ }
+
+  console.log('  ⚠️ All price sources failed');
+  return null;
+}
+
+/**
+ * Fetch price from DexScreener /tokens/v1/solana/{address}
+ * Returns the highest-liquidity pair's price.
+ * @private
+ */
+async function _fetchDexScreenerPrice(tokenMint) {
+  // Fetch token price + SOL price in parallel
+  const [tokenResp, solResp] = await Promise.all([
+    fetch(`https://api.dexscreener.com/tokens/v1/solana/${tokenMint}`, {
       headers: { 'Accept': 'application/json' },
-      signal: AbortSignal.timeout(10000), // 10 second timeout
-    });
+      signal: AbortSignal.timeout(10000),
+    }),
+    fetch(`https://api.dexscreener.com/tokens/v1/solana/${SOL_MINT}`, {
+      headers: { 'Accept': 'application/json' },
+      signal: AbortSignal.timeout(10000),
+    }),
+  ]);
 
-    if (!response.ok) {
-      console.log(`  ⚠️ Jupiter API returned ${response.status}`);
-      return null;
-    }
-
-    const data = await response.json();
-    const tokenData = data?.data?.[tokenMint];
-    const solData = data?.data?.[SOL_MINT];
-
-    if (!tokenData?.price) {
-      console.log('  ⚠️ No price data from Jupiter for this token');
-      return null;
-    }
-
-    const priceUSD = parseFloat(tokenData.price);
-    const solPriceUSD = solData?.price ? parseFloat(solData.price) : 0;
-    const priceSOL = solPriceUSD > 0 ? priceUSD / solPriceUSD : 0;
-
-    return { priceUSD, solPriceUSD, priceSOL };
-  } catch (err) {
-    console.log(`  ⚠️ Jupiter price fetch failed: ${err.message}`);
+  if (!tokenResp.ok) {
+    console.log(`  ⚠️ DexScreener returned ${tokenResp.status}`);
     return null;
   }
+
+  const tokenPairs = await tokenResp.json();
+  const solPairs = solResp.ok ? await solResp.json() : [];
+
+  // DexScreener returns array of pairs sorted by liquidity
+  // Pick the first pair where our token is the baseToken
+  let tokenPair = null;
+  if (Array.isArray(tokenPairs) && tokenPairs.length > 0) {
+    // Prefer pair where our token is baseToken (priceUsd = our token's price)
+    tokenPair = tokenPairs.find(p => p.baseToken?.address === tokenMint) || tokenPairs[0];
+  }
+
+  if (!tokenPair?.priceUsd) {
+    console.log('  ⚠️ No DexScreener price data for this token');
+    return null;
+  }
+
+  // If our token is the quoteToken, we need to invert the price
+  let priceUSD;
+  if (tokenPair.baseToken?.address === tokenMint) {
+    priceUSD = parseFloat(tokenPair.priceUsd);
+  } else {
+    // Token is quoteToken — priceUsd is for baseToken, need to invert
+    const basePrice = parseFloat(tokenPair.priceUsd);
+    const nativePrice = parseFloat(tokenPair.priceNative || '0');
+    priceUSD = nativePrice > 0 ? basePrice / nativePrice : 0;
+  }
+
+  // Get SOL price from SOL pairs
+  let solPriceUSD = 0;
+  if (Array.isArray(solPairs) && solPairs.length > 0) {
+    const solPair = solPairs.find(p => p.baseToken?.address === SOL_MINT) || solPairs[0];
+    if (solPair?.priceUsd) {
+      solPriceUSD = solPair.baseToken?.address === SOL_MINT
+        ? parseFloat(solPair.priceUsd)
+        : 0;
+    }
+  }
+
+  // Fallback SOL price from the token pair's native price ratio
+  if (solPriceUSD === 0 && tokenPair.priceUsd && tokenPair.priceNative) {
+    const usd = parseFloat(tokenPair.priceUsd);
+    const native = parseFloat(tokenPair.priceNative);
+    if (native > 0) solPriceUSD = usd / native;
+  }
+
+  const priceSOL = solPriceUSD > 0 ? priceUSD / solPriceUSD : 0;
+
+  console.log(`  ✅ DexScreener: ${priceUSD.toExponential(2)} USD | SOL=$${solPriceUSD.toFixed(2)}`);
+  return { priceUSD, solPriceUSD, priceSOL };
+}
+
+/**
+ * Fetch price from Jupiter Price API v2 (fallback).
+ * @private
+ */
+async function _fetchJupiterPrice(tokenMint) {
+  const url = `https://api.jup.ag/price/v2?ids=${tokenMint},${SOL_MINT}`;
+  const response = await fetch(url, {
+    headers: { 'Accept': 'application/json' },
+    signal: AbortSignal.timeout(10000),
+  });
+
+  if (!response.ok) {
+    console.log(`  ⚠️ Jupiter API returned ${response.status}`);
+    return null;
+  }
+
+  const data = await response.json();
+  const tokenData = data?.data?.[tokenMint];
+  const solData = data?.data?.[SOL_MINT];
+
+  if (!tokenData?.price) {
+    console.log('  ⚠️ No price data from Jupiter for this token');
+    return null;
+  }
+
+  const priceUSD = parseFloat(tokenData.price);
+  const solPriceUSD = solData?.price ? parseFloat(solData.price) : 0;
+  const priceSOL = solPriceUSD > 0 ? priceUSD / solPriceUSD : 0;
+
+  console.log(`  ✅ Jupiter: ${priceUSD.toExponential(2)} USD | SOL=$${solPriceUSD.toFixed(2)}`);
+  return { priceUSD, solPriceUSD, priceSOL };
 }
 
 // ─── PnL Calculation ────────────────────────────────────────────────────────
