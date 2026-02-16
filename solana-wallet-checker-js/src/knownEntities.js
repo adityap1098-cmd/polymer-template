@@ -4,8 +4,13 @@
  * Used to filter out non-human wallets from holder analysis,
  * and to exclude universal tokens from similarity scoring.
  * 
+ * Detection strategy (layered):
+ *   1. Static lists (EXCHANGE_WALLETS, LIQUIDITY_PROGRAMS) — instant lookup
+ *   2. isOnCurve check (PublicKey.isOnCurve) — FREE, zero RPC, catches all PDAs
+ *   3. Owner program check (getMultipleAccounts) — labels specific programs
+ * 
  * Sources: Solscan labels, Arkham Intelligence, public documentation.
- * Last updated: 2026-02-15
+ * Last updated: 2026-02-16
  */
 
 // ─── KNOWN EXCHANGE HOT WALLETS / DEPOSIT ADDRESSES ────────────────────────
@@ -88,6 +93,7 @@ export const LIQUIDITY_PROGRAMS = new Set([
   'FWMFkL4gJbLphiEejbt6KDj5FbN6cYAbyMfDUZ4dfFdb',  // Pump.fun LP Token vault
   '2DxxYabaeF2eCi2duW9EA9QNr1UjAPqyMXrWmYW7ZxSD',  // Pump.fun Liquidity Wallet
   '6UxXQsbGLc6r3cet3z5bqM7mMYxmbawkDpRx4Ku8RaqX',  // Pump.fun ALIENSCANNER Bonding Curve
+  'pAMMBay6oceH9fJKBRHGP5D4bD4sWpmSwMn52FMfXEA',   // Pump.fun AMM
 
   // Meteora
   'LBUZKhRxPF3XUpBCjp4YzTKgLccjZhTSDM9YuVaPwxo',   // Meteora DLMM
@@ -168,6 +174,7 @@ export const KNOWN_PROGRAM_LABELS = new Map([
   ['BSfD6SHZigAfDWSjzD5Q41jw8LmKwtmjskPH9oYFa2Bh', '🐸 Pump.fun Migration'],
   ['Ce6TQqeHC9p8KetsN6JsjHK7UTZk7nasjjnr7XxXp18W', '🐸 Pump.fun Fee'],
   ['CebN5WGQ4jvEPvsVU4EoHEpgzq1VV7AbCJ9BSKKbV14p', '🐸 Pump.fun Auth'],
+  ['pAMMBay6oceH9fJKBRHGP5D4bD4sWpmSwMn52FMfXEA', '🐸 Pump.fun AMM'],
 
   // ── Raydium ──
   ['675kPX9MHTjS2zt1qfr1NYHuzeLXfQM9H24wFSUt1Mp8', '💧 Raydium AMM V4'],

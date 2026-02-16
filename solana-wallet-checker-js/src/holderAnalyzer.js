@@ -12,6 +12,7 @@
  * References: Bubblemaps, Arkham Intelligence, GMGN, RugCheck
  */
 
+import { PublicKey } from '@solana/web3.js';
 import { RateLimitedRPC } from './rateLimiter.js';
 import {
   EXCHANGE_WALLETS, LIQUIDITY_PROGRAMS, UNIVERSAL_TOKENS,
@@ -21,6 +22,26 @@ import {
 
 const TOKEN_PROGRAM_ID = 'TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA';
 const TOKEN_2022_PROGRAM_ID = 'TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb';
+
+/**
+ * Check if a Solana address is on the Ed25519 curve.
+ * On-curve = could be a real user wallet (has a private key).
+ * Off-curve = guaranteed PDA (Program Derived Address) = not a human.
+ *
+ * This is a FREE, instant, zero-RPC check — pure math.
+ * Solana explorers show this as "isOnCurve: True/False" in account info.
+ *
+ * @param {string} address - Base58 Solana address
+ * @returns {boolean} true if on-curve (possible user), false if off-curve (PDA)
+ */
+export function checkIsOnCurve(address) {
+  try {
+    const pubkey = new PublicKey(address);
+    return PublicKey.isOnCurve(pubkey.toBytes());
+  } catch {
+    return false; // invalid address = treat as non-user
+  }
+}
 
 // ─── Math Utilities ─────────────────────────────────────────────────────────
 
@@ -286,22 +307,72 @@ export class HolderAnalyzer {
     console.log(`  Static filter: ${filteredEntities.length} known entities removed, ${holders.length} remaining`);
 
     // ═══════════════════════════════════════════════════════════════════
+    // PHASE 2.5: isOnCurve Instant PDA Filter (FREE — zero RPC calls)
+    //   PublicKey.isOnCurve() checks if address is on Ed25519 curve.
+    //   Off-curve = guaranteed PDA = not a human wallet.
+    //   This is the same "isOnCurve: False" shown on Solscan/Solana Explorer.
+    //   Filters obvious PDAs BEFORE expensive RPC batch calls.
+    // ═══════════════════════════════════════════════════════════════════
+
+    {
+      const offCurveHolders = [];
+      const onCurveHolders = [];
+
+      for (const holder of holders) {
+        if (checkIsOnCurve(holder.owner)) {
+          onCurveHolders.push(holder);
+        } else {
+          offCurveHolders.push(holder);
+        }
+      }
+
+      if (offCurveHolders.length > 0) {
+        console.log(`  🎯 isOnCurve filter: ${offCurveHolders.length} off-curve addresses (PDAs) detected instantly (0 RPC calls)`);
+        for (const holder of offCurveHolders) {
+          filteredEntities.push({
+            owner: holder.owner,
+            type: 'PDA_CURVE',
+            label: '🤖 PDA (off-curve)',
+            balance: holder.balance,
+          });
+        }
+
+        // Keep only on-curve holders for further analysis
+        holders.length = 0;
+        holders.push(...onCurveHolders);
+
+        // Also update unknownOwners to only include on-curve wallets
+        unknownOwners.length = 0;
+        unknownOwners.push(...onCurveHolders.map(h => h.owner));
+
+        console.log(`  ✅ After isOnCurve: ${holders.length} on-curve wallets remain`);
+      }
+    }
+
+    // ═══════════════════════════════════════════════════════════════════
     // PHASE 3: Dynamic PDA Detection — check wallet program ownership
-    //   If wallet.owner !== System Program → it's a PDA (DEX/liquidity)
-    //   This catches ALL Pump.fun bonding curves, Raydium pools, etc.
+    //   For on-curve wallets, verify via getMultipleAccounts that
+    //   wallet.owner === System Program. Identifies program-owned
+    //   accounts that happen to be on-curve (rare but possible).
+    //   Also labels the specific program (Pump.fun, Raydium, etc.)
     // ═══════════════════════════════════════════════════════════════════
 
     if (this.config.detectProgramOwned && unknownOwners.length > 0) {
-      console.log(`  🔎 Detecting program-owned wallets (PDA check on ${unknownOwners.length} wallets)...`);
+      console.log(`  🔎 Verifying ownership of ${unknownOwners.length} on-curve wallets via getMultipleAccounts...`);
 
       const pdaDetected = new Map(); // owner → { programId, label }
 
+      // Also collect off-curve PDA addresses to upgrade their labels
+      const offCurvePDAs = filteredEntities
+        .filter(e => e.type === 'PDA_CURVE')
+        .map(e => e.owner);
+      const allToCheck = [...new Set([...unknownOwners, ...offCurvePDAs])];
+
       // Batch check in chunks of 100 using getMultipleAccounts
       const BATCH_SIZE = 100;
-      const uniqueOwners = [...new Set(unknownOwners)];
 
-      for (let i = 0; i < uniqueOwners.length; i += BATCH_SIZE) {
-        const batch = uniqueOwners.slice(i, i + BATCH_SIZE);
+      for (let i = 0; i < allToCheck.length; i += BATCH_SIZE) {
+        const batch = allToCheck.slice(i, i + BATCH_SIZE);
         try {
           const batchResult = await this.rpc.call('getMultipleAccounts', [
             batch, { encoding: 'jsonParsed' },
@@ -334,6 +405,15 @@ export class HolderAnalyzer {
         console.log(`  🎯 Detected ${pdaDetected.size} program-owned wallets (PDAs):`);
         for (const [addr, info] of pdaDetected) {
           console.log(`     ↳ ${info.label}: ${addr.slice(0, 16)}...`);
+        }
+
+        // Upgrade labels of off-curve PDAs that were generic "🤖 PDA (off-curve)"
+        for (const ent of filteredEntities) {
+          if (ent.type === 'PDA_CURVE' && pdaDetected.has(ent.owner)) {
+            const info = pdaDetected.get(ent.owner);
+            ent.label = info.label;  // upgrade from generic to specific (e.g., "🐸 Pump.fun Bonding Curve")
+            ent.programId = info.programId;
+          }
         }
 
         // Move PDA wallets from holders to filteredEntities

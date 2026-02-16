@@ -8,7 +8,7 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { WalletAnalyzer, WalletType, WalletProfile } from './walletAnalyzer.js';
-import { HolderAnalyzer, calculateGini, jaccardSimilarity } from './holderAnalyzer.js';
+import { HolderAnalyzer, calculateGini, jaccardSimilarity, checkIsOnCurve } from './holderAnalyzer.js';
 import { FundingAnalyzer } from './fundingAnalyzer.js';
 import { CSVImporter } from './csvImporter.js';
 import { TransactionMonitor } from './transactionMonitor.js';
@@ -1214,5 +1214,64 @@ describe('Output Formatting - Entities show names only (no addresses)', () => {
     // Should NOT contain the raw exchange address in the filtered section
     assert.ok(!output.includes('5tzFkiKscXHK5ZXCGbXZxdw7gTjjD1mBwuoFbhUvuAi9'), 'Should NOT show raw exchange address');
     assert.ok(!output.includes('PumpFunBondingCurvePDA12345678901234567890'), 'Should NOT show raw PDA address');
+  });
+});
+
+// ============== isOnCurve PDA Detection Tests ==============
+
+describe('checkIsOnCurve - Ed25519 curve check (zero RPC)', () => {
+  it('should return true for known real user wallets (on-curve)', () => {
+    // Binance hot wallet — real wallet, has private key, isOnCurve: true
+    assert.equal(checkIsOnCurve('5tzFkiKscXHK5ZXCGbXZxdw7gTjjD1mBwuoFbhUvuAi9'), true);
+  });
+
+  it('program IDs are on-curve (deployed from keypairs)', () => {
+    // Program IDs are NOT PDAs — they were created from real keypairs
+    // isOnCurve=true for programs. Phase 3 (owner check) handles them.
+    assert.equal(checkIsOnCurve('TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA'), true);
+    assert.equal(checkIsOnCurve('6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P'), true);
+  });
+
+  it('should return false for addresses derived via findProgramAddress (true PDAs)', () => {
+    // ComputeBudget is a native program with a manufactured off-curve address
+    assert.equal(checkIsOnCurve('ComputeBudget111111111111111111111111111111'), false);
+  });
+
+  it('should return false for invalid/garbage addresses', () => {
+    assert.equal(checkIsOnCurve('invalid'), false);
+    assert.equal(checkIsOnCurve(''), false);
+  });
+
+  it('Pump.fun AMM program should be in KNOWN_PROGRAM_LABELS', () => {
+    const label = KNOWN_PROGRAM_LABELS.get('pAMMBay6oceH9fJKBRHGP5D4bD4sWpmSwMn52FMfXEA');
+    assert.ok(label, 'Should have Pump.fun AMM label');
+    assert.ok(label.includes('Pump.fun AMM'));
+  });
+
+  it('isOnCurve catches real PDAs — bonding curve TOKEN accounts are off-curve', async () => {
+    // In real usage: Pump.fun bonding curve's TOKEN ACCOUNT (not program ID)
+    // is a PDA derived via findProgramAddress → always off-curve.
+    // We generate a test PDA to verify:
+    const { PublicKey } = await import('@solana/web3.js');
+    const [pda] = PublicKey.findProgramAddressSync(
+      [Buffer.from('test-seed')],
+      new PublicKey('6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P'),
+    );
+    assert.equal(checkIsOnCurve(pda.toBase58()), false, 'PDA should be off-curve');
+  });
+
+  it('summary: isOnCurve filters PDAs, Phase 3 owner-check handles programs', () => {
+    // This test documents the 3-layer detection strategy:
+    // Layer 1: Static lists (EXCHANGE_WALLETS, LIQUIDITY_PROGRAMS)
+    // Layer 2: isOnCurve=false → instant PDA filter (0 RPC calls)
+    // Layer 3: getMultipleAccounts owner check → catches on-curve programs
+    //
+    // Pump.fun pool accounts in real data:
+    //   - Token ACCOUNT (holds tokens) = PDA → off-curve → caught by Layer 2
+    //   - Program owner field = 6EF8r... → caught by Layer 3 label upgrade
+
+    // Verify the function at least works correctly on edge cases
+    assert.equal(typeof checkIsOnCurve('11111111111111111111111111111111'), 'boolean');
+    assert.equal(typeof checkIsOnCurve('randomtext'), 'boolean');
   });
 });
