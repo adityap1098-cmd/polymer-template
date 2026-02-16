@@ -101,6 +101,7 @@ export class HolderAnalyzer {
       useSNS: config.useSNS || false,
       useProgramAccounts: config.useProgramAccounts || false,
       detectProgramOwned: config.detectProgramOwned || false,
+      batchAccountsLimit: config.batchAccountsLimit || 5,
     };
     this.rpc = new RateLimitedRPC(rpcUrl, this.config.maxRps);
   }
@@ -206,29 +207,34 @@ export class HolderAnalyzer {
 
       // Resolve token accounts to owner wallets
       if (this.config.useBatchAccounts) {
-        console.log('  ⚡ Using getMultipleAccounts (batch mode)');
+        const BATCH_LIMIT = this.config.batchAccountsLimit;
+        console.log(`  ⚡ Using getMultipleAccounts (batch mode, ${BATCH_LIMIT}/call)`);
         const addresses = accounts.map(a => a.address).filter(Boolean);
         const amounts = new Map(accounts.map(a => [a.address, parseFloat(a.amount || '0')]));
 
         try {
-          const batchResult = await this.rpc.call('getMultipleAccounts', [
-            addresses, { encoding: 'jsonParsed' },
-          ]);
+          // Chunk into batches respecting QuickNode plan limit
+          for (let b = 0; b < addresses.length; b += BATCH_LIMIT) {
+            const chunk = addresses.slice(b, b + BATCH_LIMIT);
+            const batchResult = await this.rpc.call('getMultipleAccounts', [
+              chunk, { encoding: 'jsonParsed' },
+            ]);
 
-          if (batchResult?.value) {
-            for (let i = 0; i < batchResult.value.length; i++) {
-              const acctData = batchResult.value[i];
-              const address = addresses[i];
-              const amount = amounts.get(address) || 0;
-              if (!acctData || amount <= 0) continue;
+            if (batchResult?.value) {
+              for (let i = 0; i < batchResult.value.length; i++) {
+                const acctData = batchResult.value[i];
+                const address = chunk[i];
+                const amount = amounts.get(address) || 0;
+                if (!acctData || amount <= 0) continue;
 
-              const parsed = acctData.data?.parsed || {};
-              const info = parsed.info || {};
-              const owner = info.owner;
-              if (!owner || owner.length < 32) continue;
+                const parsed = acctData.data?.parsed || {};
+                const info = parsed.info || {};
+                const owner = info.owner;
+                if (!owner || owner.length < 32) continue;
 
-              const decimals = info.tokenAmount?.decimals || 0;
-              rawAccounts.push({ tokenAccount: address, owner, balance: amount, decimals });
+                const decimals = info.tokenAmount?.decimals || 0;
+                rawAccounts.push({ tokenAccount: address, owner, balance: amount, decimals });
+              }
             }
           }
         } catch (err) {
@@ -368,8 +374,8 @@ export class HolderAnalyzer {
         .map(e => e.owner);
       const allToCheck = [...new Set([...unknownOwners, ...offCurvePDAs])];
 
-      // Batch check in chunks of 100 using getMultipleAccounts
-      const BATCH_SIZE = 100;
+      // Batch check using getMultipleAccounts (chunk size respects plan limit)
+      const BATCH_SIZE = this.config.batchAccountsLimit;
 
       for (let i = 0; i < allToCheck.length; i += BATCH_SIZE) {
         const batch = allToCheck.slice(i, i + BATCH_SIZE);

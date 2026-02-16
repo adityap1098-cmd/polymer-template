@@ -964,15 +964,19 @@ describe('PlanConfig', () => {
     assert.equal(PLANS.paid.useSNS, true);
     assert.equal(PLANS.paid.useProgramAccounts, true);
     assert.equal(PLANS.paid.detectProgramOwned, true);
+    assert.equal(PLANS.paid.batchAccountsLimit, 100);
   });
 
-  it('free plan should have enhanced API flags disabled', () => {
-    assert.equal(PLANS.free.useBatchAccounts, false);
+  it('free plan should have limited enhanced features', () => {
+    // Free/Discover: getMultipleAccounts works but limited to 5/call
+    assert.equal(PLANS.free.useBatchAccounts, true);
+    assert.equal(PLANS.free.detectProgramOwned, true);
+    assert.equal(PLANS.free.batchAccountsLimit, 5);
+    // These remain disabled on free
     assert.equal(PLANS.free.useEnhancedTx, false);
     assert.equal(PLANS.free.useDAS, false);
     assert.equal(PLANS.free.useSNS, false);
-    assert.equal(PLANS.free.useProgramAccounts || false, false);
-    assert.equal(PLANS.free.detectProgramOwned || false, false);
+    assert.equal(PLANS.free.useProgramAccounts, false);
   });
 
   it('paid plan topHolders should be 200 (getProgramAccounts unlocked)', () => {
@@ -1189,10 +1193,11 @@ describe('HolderAnalyzer - getProgramAccounts & PDA Detection Config', () => {
     assert.equal(analyzer.config.detectProgramOwned, true);
   });
 
-  it('free plan config should NOT enable getProgramAccounts + PDA detection', () => {
+  it('free plan config should NOT enable getProgramAccounts but SHOULD enable PDA detection', () => {
     const analyzer = new HolderAnalyzer(TEST_RPC, PLANS.free);
     assert.equal(analyzer.config.useProgramAccounts, false);
-    assert.equal(analyzer.config.detectProgramOwned, false);
+    assert.equal(analyzer.config.detectProgramOwned, true);
+    assert.equal(analyzer.config.batchAccountsLimit, 5);
   });
 });
 

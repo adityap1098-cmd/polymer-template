@@ -28,12 +28,15 @@ const PLANS = {
     purchaseTimeScanLimit: 1000, // sigs to scan for first purchase
 
     // Enhanced API features (disabled on free)
-    useBatchAccounts: false, // getMultipleAccounts (batch account info)
+    useBatchAccounts: true,  // getMultipleAccounts works on Discover (max 5/call)
+    batchAccountsLimit: 5,   // Discover plan: max 5 accounts per getMultipleAccounts call
     useEnhancedTx: false,    // getTransactionsForAddress (single-call tx fetch)
     useDAS: false,           // DAS getAssetsByOwner (richer token data)
     useSNS: false,           // SNS .sol domain detection
+    useProgramAccounts: false, // getProgramAccounts disabled (heavy on free plan)
+    detectProgramOwned: true,  // PDA detection via getMultipleAccounts (5/call is enough)
 
-    description: 'QuickNode Free — 15 req/s, 50K credits/day',
+    description: 'QuickNode Free/Discover — 15 req/s, 50K credits/day',
   },
   paid: {
     name: 'Build ($42/mo)',
@@ -48,6 +51,7 @@ const PLANS = {
 
     // Enhanced API features (enabled on paid)
     useBatchAccounts: true,  // getMultipleAccounts — saves ~19 calls per analysis
+    batchAccountsLimit: 100, // Build plan: max 100 accounts per getMultipleAccounts call
     useEnhancedTx: true,     // getTransactionsForAddress — eliminates N+1 pattern (~50× fewer calls)
     useDAS: true,            // DAS getAssetsByOwner — complete token/NFT profile
     useSNS: true,            // SNS .sol domain detection — identity signal for risk scoring
