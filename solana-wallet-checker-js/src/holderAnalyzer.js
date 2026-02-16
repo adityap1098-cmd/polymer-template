@@ -20,9 +20,7 @@ import {
   KNOWN_PROGRAM_LABELS, SYSTEM_PROGRAM_ID, getProgramLabel, isUserWallet,
 } from './knownEntities.js';
 import { extractEntryPriceFromTx } from './priceAnalyzer.js';
-
-const TOKEN_PROGRAM_ID = 'TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA';
-const TOKEN_2022_PROGRAM_ID = 'TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb';
+import { TOKEN_PROGRAM_ID, TOKEN_2022_PROGRAM_ID } from './utils.js';
 
 /**
  * Check if a Solana address is on the Ed25519 curve.
@@ -458,61 +456,67 @@ export class HolderAnalyzer {
     const topHolders = holders.slice(0, limit);
     console.log(`Analyzing top ${topHolders.length} holders...`);
 
-    // Get purchase time + entry price + wallet age + token holdings SEQUENTIALLY
-    for (let i = 0; i < topHolders.length; i++) {
-      try {
-        const purchaseInfo = await this._getFirstPurchaseTime(topHolders[i].owner, tokenMint);
-        topHolders[i].purchaseTime = purchaseInfo?.purchaseTime || null;
-        topHolders[i].purchaseTimeStr = purchaseInfo?.purchaseTime
-          ? purchaseInfo.purchaseTime.toISOString().replace('T', ' ').split('.')[0]
-          : 'Unknown';
+    // Get purchase time + entry price + wallet age + token holdings
+    // Parallel batched: process CONCURRENCY holders at a time
+    const CONCURRENCY = 3;
+    for (let batch = 0; batch < topHolders.length; batch += CONCURRENCY) {
+      const chunk = topHolders.slice(batch, batch + CONCURRENCY);
+      const promises = chunk.map(async (holder, localIdx) => {
+        const i = batch + localIdx;
+        try {
+          const purchaseInfo = await this._getFirstPurchaseTime(holder.owner, tokenMint);
+          topHolders[i].purchaseTime = purchaseInfo?.purchaseTime || null;
+          topHolders[i].purchaseTimeStr = purchaseInfo?.purchaseTime
+            ? purchaseInfo.purchaseTime.toISOString().replace('T', ' ').split('.')[0]
+            : 'Unknown';
 
-        // Entry price data from purchase transaction
-        if (purchaseInfo?.entryPrice) {
-          topHolders[i].entryPriceSol = purchaseInfo.entryPrice.pricePerToken;
-          topHolders[i].solSpent = purchaseInfo.entryPrice.solSpent;
-          topHolders[i].tokensReceived = purchaseInfo.entryPrice.tokensReceived;
-        } else {
+          // Entry price data from purchase transaction
+          if (purchaseInfo?.entryPrice) {
+            topHolders[i].entryPriceSol = purchaseInfo.entryPrice.pricePerToken;
+            topHolders[i].solSpent = purchaseInfo.entryPrice.solSpent;
+            topHolders[i].tokensReceived = purchaseInfo.entryPrice.tokensReceived;
+          } else {
+            topHolders[i].entryPriceSol = null;
+            topHolders[i].solSpent = null;
+            topHolders[i].tokensReceived = null;
+          }
+
+          // Wallet age & activity metrics (paginated — finds TRUE oldest tx)
+          const walletAge = await this._getWalletAge(holder.owner);
+          topHolders[i].walletAgeDays = walletAge.ageDays;
+          topHolders[i].txFrequency = walletAge.txPerDay;
+          topHolders[i].totalTxCount = walletAge.totalTx;
+
+          // Token holdings — combine CURRENT accounts + HISTORICAL tx scan
+          const tokenData = await this._getWalletTokenAccounts(holder.owner, tokenMint);
+          const historicalTokens = await this._getWalletTokenHistory(holder.owner, tokenMint, this.config.txHistoryPerWallet);
+          const combinedTokens = new Set([...tokenData.allTokens, ...historicalTokens]);
+          topHolders[i].tradedTokens = combinedTokens;
+          topHolders[i].tokenCount = tokenData.tokenCount;
+          topHolders[i].historicalTokenCount = combinedTokens.size;
+        } catch {
+          topHolders[i].purchaseTime = null;
+          topHolders[i].purchaseTimeStr = 'Unknown';
           topHolders[i].entryPriceSol = null;
           topHolders[i].solSpent = null;
           topHolders[i].tokensReceived = null;
+          topHolders[i].walletAgeDays = null;
+          topHolders[i].txFrequency = 0;
+          topHolders[i].totalTxCount = 0;
+          topHolders[i].tradedTokens = new Set();
+          topHolders[i].tokenCount = 0;
+          topHolders[i].historicalTokenCount = 0;
         }
+      });
+      await Promise.all(promises);
 
-        // Wallet age & activity metrics (paginated — finds TRUE oldest tx)
-        const walletAge = await this._getWalletAge(topHolders[i].owner);
-        topHolders[i].walletAgeDays = walletAge.ageDays;
-        topHolders[i].txFrequency = walletAge.txPerDay;
-        topHolders[i].totalTxCount = walletAge.totalTx;
-
-        // Token holdings — combine CURRENT accounts + HISTORICAL tx scan
-        // getTokenAccountsByOwner misses closed accounts (sold tokens)!
-        // Must scan tx history to find ALL tokens ever traded.
-        const tokenData = await this._getWalletTokenAccounts(topHolders[i].owner, tokenMint);
-        const historicalTokens = await this._getWalletTokenHistory(topHolders[i].owner, tokenMint, this.config.txHistoryPerWallet);
-        const combinedTokens = new Set([...tokenData.allTokens, ...historicalTokens]);
-        topHolders[i].tradedTokens = combinedTokens;
-        topHolders[i].tokenCount = tokenData.tokenCount; // actual currently-held count
-        topHolders[i].historicalTokenCount = combinedTokens.size; // total for Jaccard
-      } catch {
-        topHolders[i].purchaseTime = null;
-        topHolders[i].purchaseTimeStr = 'Unknown';
-        topHolders[i].entryPriceSol = null;
-        topHolders[i].solSpent = null;
-        topHolders[i].tokensReceived = null;
-        topHolders[i].walletAgeDays = null;
-        topHolders[i].txFrequency = 0;
-        topHolders[i].totalTxCount = 0;
-        topHolders[i].tradedTokens = new Set();
-        topHolders[i].tokenCount = 0;
-        topHolders[i].historicalTokenCount = 0;
-      }
-      if ((i + 1) % 3 === 0 || i === topHolders.length - 1) {
-        const curr = topHolders[i].tokenCount || 0;
-        const hist = topHolders[i].historicalTokenCount || 0;
-        const ep = topHolders[i].entryPriceSol;
-        const epStr = ep != null && ep > 0 ? ` entry=${ep.toExponential(2)}SOL` : '';
-        console.log(`  Holder info: ${i + 1}/${topHolders.length} | ${topHolders[i].owner.slice(0, 12)}... age=${topHolders[i].walletAgeDays}d tokens=${hist} (${curr} held + ${hist - curr} history)${epStr}`);
-      }
+      // Log progress after each batch
+      const lastIdx = Math.min(batch + CONCURRENCY, topHolders.length) - 1;
+      const curr = topHolders[lastIdx].tokenCount || 0;
+      const hist = topHolders[lastIdx].historicalTokenCount || 0;
+      const ep = topHolders[lastIdx].entryPriceSol;
+      const epStr = ep != null && ep > 0 ? ` entry=${ep.toExponential(2)}SOL` : '';
+      console.log(`  Holder info: ${lastIdx + 1}/${topHolders.length} | ${topHolders[lastIdx].owner.slice(0, 12)}... age=${topHolders[lastIdx].walletAgeDays}d tokens=${hist} (${curr} held + ${hist - curr} history)${epStr}`);
     }
 
     const stats = this.rpc.getStats();

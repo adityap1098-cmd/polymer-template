@@ -7,6 +7,7 @@
 
 import { RateLimitedRPC } from './rateLimiter.js';
 import { isUniversalToken } from './knownEntities.js';
+import { TOKEN_PROGRAM_ID, TOKEN_2022_PROGRAM_ID } from './utils.js';
 
 /** Wallet classification types */
 export const WalletType = {
@@ -19,14 +20,10 @@ export const WalletType = {
 export const WalletProfile = {
   ORGANIC: 'ORGANIC',       // Normal human trader
   SNIPER_BOT: 'SNIPER_BOT', // Extremely fast, low-diversity trading
-  COPY_TRADER: 'COPY_TRADER', // Follows other wallets' trades closely
+  COPY_TRADER: 'COPY_TRADER', // Very high tx frequency across many tokens
   DORMANT: 'DORMANT',        // Old wallet, very low recent activity
   FRESH_FUNDED: 'FRESH_FUNDED', // Brand new, just received SOL
 };
-
-/** Solana Token Program IDs */
-const TOKEN_PROGRAM_ID = 'TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA';
-const TOKEN_2022_PROGRAM_ID = 'TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb';
 
 export class WalletAnalyzer {
   /**
@@ -240,13 +237,13 @@ export class WalletAnalyzer {
     if (txPerDay > 50 && uniqueTokenCount <= 3) {
       return WalletProfile.SNIPER_BOT;
     }
+    // COPY_TRADER: high tx frequency spanning many different tokens
+    if (txPerDay > 20 && uniqueTokenCount >= 10) {
+      return WalletProfile.COPY_TRADER;
+    }
     if (walletAgeDays !== null && walletAgeDays > 180 && txPerDay < 0.1) {
       return WalletProfile.DORMANT;
     }
     return WalletProfile.ORGANIC;
   }
-}
-
-function sleep(ms) {
-  return new Promise(resolve => setTimeout(resolve, ms));
 }

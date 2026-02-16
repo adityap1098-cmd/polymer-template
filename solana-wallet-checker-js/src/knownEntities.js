@@ -37,7 +37,23 @@ export const EXCHANGE_WALLETS = new Map([
   ['JA5y5BQUV3sMsv6M8WxpJKzwKJRxR9pvnBJiGzJAUvP8', 'OKX'],
 
   // Bybit
-  ['AC5RDfQFmDS1deWZos921JfqscXdByf8BKHs5ACWjtW2', 'Bybit'],
+  ['HdsLDfDdcWwj1qTRj2u88HuXpTFMoMCRjqN6CJ5LGX6v', 'Bybit'],
+  ['7EYnhQoR9YM3N7UoaKRoA44Uy8JeaZV3qyouov87awMs', 'Bybit'],
+
+  // HTX (Huobi)
+  ['46mELQVECSTADmwNaJNkBQo1RZoojSkXr6nSyRRk17y7', 'HTX'],
+
+  // Upbit
+  ['DCzJVXamcGmjCJX5oWJuEU1RNDEz1Kgmh5TwG53N1bGp', 'Upbit'],
+
+  // Crypto.com
+  ['AobVSwdW9BbpMdJvTqeCN4hPAmh4rHm7vwLnQ5ATbo3s', 'Crypto.com'],
+
+  // Gemini
+  ['GhcGFRubWktQTG5Rz4wxVRN1LhoN3HYRGKzRwzK3CLSB', 'Gemini'],
+
+  // Backpack
+  ['GJRs4FwHtemZ5ZE9x3FNvJ8TMwitKTh21yxdRPqn7npQ', 'Backpack'],
 
   // KuCoin
   ['BmFdpraQhkiDQE6SnfG5PvR4r59BNGYSMuxCEMcRMaaM', 'KuCoin'],
@@ -272,6 +288,9 @@ export function getEntityLabel(address) {
   if (exchange) return `🏦 ${exchange}`;
 
   if (LIQUIDITY_PROGRAMS.has(address)) return '🔄 Liquidity/DEX';
+
+  const programLabel = KNOWN_PROGRAM_LABELS.get(address);
+  if (programLabel) return programLabel;
 
   return null;
 }

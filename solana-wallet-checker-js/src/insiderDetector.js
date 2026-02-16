@@ -13,8 +13,7 @@
 
 import { RateLimitedRPC } from './rateLimiter.js';
 import { isUniversalToken, getEntityLabel, identifyExchange, isLiquidityProgram } from './knownEntities.js';
-
-const TOKEN_PROGRAM_ID = 'TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA';
+import { TOKEN_PROGRAM_ID } from './utils.js';
 
 export class InsiderDetector {
   constructor(rpcUrl, maxRps = 12, config = {}) {
@@ -35,7 +34,7 @@ export class InsiderDetector {
    * @returns {Promise<Array<{from, to, amountSOL, timestamp}>>}
    */
   async detectInterHolderTransfers(holders) {
-    console.log(`\n🔗 Checking inter-holder SOL transfers (${holders.length} wallets, last ${this.interHolderTxScan} tx each)...`);
+    console.log(`\n🔗 Checking inter-holder SOL & token transfers (${holders.length} wallets, last ${this.interHolderTxScan} tx each)...`);
     if (this.useEnhancedTx) console.log('  ⚡ Using getTransactionsForAddress (fast mode)');
     const holderSet = new Set(holders.map(h => h.owner));
     const transfers = [];
@@ -98,6 +97,76 @@ export class InsiderDetector {
                 amountSOL: Math.abs(diff) / 1e9,
                 timestamp: blockTime ? new Date(blockTime * 1000) : null,
                 signature,
+                type: 'SOL',
+              });
+            }
+          }
+
+          // ── Also check SPL token transfers between holders ──
+          const preTokenBals = tx.meta.preTokenBalances || [];
+          const postTokenBals = tx.meta.postTokenBalances || [];
+
+          // Build owner→mint→balance maps
+          const preTokenMap = new Map();
+          for (const bal of preTokenBals) {
+            if (bal.owner && holderSet.has(bal.owner)) {
+              const key = `${bal.owner}|${bal.mint}`;
+              preTokenMap.set(key, parseFloat(bal.uiTokenAmount?.uiAmountString || bal.uiTokenAmount?.uiAmount || '0'));
+            }
+          }
+          const postTokenMap = new Map();
+          for (const bal of postTokenBals) {
+            if (bal.owner && holderSet.has(bal.owner)) {
+              const key = `${bal.owner}|${bal.mint}`;
+              postTokenMap.set(key, parseFloat(bal.uiTokenAmount?.uiAmountString || bal.uiTokenAmount?.uiAmount || '0'));
+            }
+          }
+
+          // Find token sends & receives between holders in same tx
+          const allKeys = new Set([...preTokenMap.keys(), ...postTokenMap.keys()]);
+          const senders = [];
+          const receivers = [];
+          for (const key of allKeys) {
+            const [owner, mint] = key.split('|');
+            if (owner === holders[i].owner || !holderSet.has(owner)) continue;
+            const pre = preTokenMap.get(key) || 0;
+            const post = postTokenMap.get(key) || 0;
+            const delta = post - pre;
+            if (delta < 0) senders.push({ owner, mint, amount: Math.abs(delta) });
+            if (delta > 0) receivers.push({ owner, mint, amount: delta });
+          }
+
+          // Match: if holder[i] sent tokens and another holder received (or vice versa)
+          const myKey = (mint) => `${holders[i].owner}|${mint}`;
+          for (const recv of receivers) {
+            const myPre = preTokenMap.get(myKey(recv.mint)) || 0;
+            const myPost = postTokenMap.get(myKey(recv.mint)) || 0;
+            if (myPre - myPost > 0) { // I sent, they received
+              transfers.push({
+                from: holders[i].owner,
+                to: recv.owner,
+                amountSOL: 0,
+                tokenAmount: recv.amount,
+                tokenMint: recv.mint,
+                timestamp: blockTime ? new Date(blockTime * 1000) : null,
+                signature,
+                type: 'TOKEN',
+              });
+            }
+          }
+          for (const send of senders) {
+            const myPre = preTokenMap.get(myKey(send.mint)) || 0;
+            const myPost = postTokenMap.get(myKey(send.mint)) || 0;
+            if (myPost - myPre > 0) { // They sent, I received
+              transfers.push({
+                from: send.owner,
+                to: holders[i].owner,
+                amountSOL: 0,
+                tokenAmount: send.amount,
+                tokenMint: send.mint,
+                timestamp: blockTime ? new Date(blockTime * 1000) : null,
+                signature,
+                type: 'TOKEN',
               });
             }
           }
@@ -120,7 +189,7 @@ export class InsiderDetector {
       }
     }
 
-    console.log(`   Found ${unique.length} inter-holder transfers`);
+    console.log(`   Found ${unique.length} inter-holder transfers (SOL: ${unique.filter(t => t.type === 'SOL').length}, Token: ${unique.filter(t => t.type === 'TOKEN').length})`);
     return unique;
   }
 
@@ -244,11 +313,15 @@ export class InsiderDetector {
       }
     }
 
-    // Signal 4: Inter-holder transfers
+    // Signal 4: Inter-holder transfers (SOL + token)
     for (const transfer of interHolderTransfers) {
-      addConnection(transfer.from, transfer.to, 'SOL_TRANSFER', {
+      const evidenceType = transfer.type === 'TOKEN' ? 'TOKEN_TRANSFER' : 'SOL_TRANSFER';
+      addConnection(transfer.from, transfer.to, evidenceType, {
         amountSOL: transfer.amountSOL,
+        tokenAmount: transfer.tokenAmount,
+        tokenMint: transfer.tokenMint,
         timestamp: transfer.timestamp,
+        type: transfer.type,
       });
     }
 
@@ -294,6 +367,7 @@ export class InsiderDetector {
         sharedFunder: false,
         timing: false,
         solTransfer: false,
+        tokenTransfer: false,
         avgJaccard: 0,
         sharedTokens: new Set(),
         funders: new Set(),
@@ -329,6 +403,10 @@ export class InsiderDetector {
                 groupEvidence.solTransfer = true;
                 groupEvidence.transfers.push(ev.detail);
                 break;
+              case 'TOKEN_TRANSFER':
+                groupEvidence.tokenTransfer = true;
+                groupEvidence.transfers.push(ev.detail);
+                break;
             }
           }
         }
@@ -361,8 +439,15 @@ export class InsiderDetector {
       // SOL Transfer between holders (0-20pts) — very strong signal
       if (groupEvidence.solTransfer) {
         confidence += 20;
-        const totalSOL = groupEvidence.transfers.reduce((s, t) => s + t.amountSOL, 0);
+        const totalSOL = groupEvidence.transfers.filter(t => t.type !== 'TOKEN').reduce((s, t) => s + (t.amountSOL || 0), 0);
         signals.push(`🔗 Transfer SOL antar-holder (${totalSOL.toFixed(4)} SOL total) — 20pts`);
+      }
+
+      // Token Transfer between holders (0-15pts) — strong signal
+      if (groupEvidence.tokenTransfer) {
+        const tokenTransfers = groupEvidence.transfers.filter(t => t.type === 'TOKEN');
+        confidence += 15;
+        signals.push(`🪙 Transfer token antar-holder (${tokenTransfers.length} transaksi) — 15pts`);
       }
 
       // Coordinated timing (0-15pts)
@@ -521,7 +606,12 @@ export class InsiderDetector {
           const timeStr = t.timestamp
             ? t.timestamp.toISOString().replace('T', ' ').split('.')[0].slice(5)
             : '';
-          lines.push(`  │   ${t.amountSOL.toFixed(4)} SOL ${timeStr ? `[${timeStr}]` : ''}`);
+          if (t.type === 'TOKEN') {
+            const mint = t.tokenMint ? t.tokenMint.slice(0, 8) + '...' : '?';
+            lines.push(`  │   🪙 ${t.tokenAmount?.toFixed(2) || '?'} token (${mint}) ${timeStr ? `[${timeStr}]` : ''}`);
+          } else {
+            lines.push(`  │   ${(t.amountSOL || 0).toFixed(4)} SOL ${timeStr ? `[${timeStr}]` : ''}`);
+          }
         }
       }
 

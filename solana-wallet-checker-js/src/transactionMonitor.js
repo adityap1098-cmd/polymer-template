@@ -7,8 +7,7 @@
 
 import { Connection, PublicKey } from '@solana/web3.js';
 import WebSocket from 'ws';
-
-const TOKEN_PROGRAM_ID = 'TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA';
+import { sleep, TOKEN_PROGRAM_ID } from './utils.js';
 
 export class TransactionMonitor {
   /**
@@ -307,8 +306,4 @@ export class TransactionMonitor {
       try { this._ws.close(); } catch (e) { /* ignore */ }
     }
   }
-}
-
-function sleep(ms) {
-  return new Promise(resolve => setTimeout(resolve, ms));
 }

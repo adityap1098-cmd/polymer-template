@@ -30,6 +30,7 @@ import { InsiderDetector } from './insiderDetector.js';
 import { CSVImporter } from './csvImporter.js';
 import { getPlanConfig } from './planConfig.js';
 import { getCurrentPrice, analyzeEarlyBuyers, formatPnLOutput } from './priceAnalyzer.js';
+import { APP_VERSION, sleep } from './utils.js';
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
@@ -70,6 +71,32 @@ function validateSolanaAddress(address) {
   }
 }
 
+/**
+ * RPC health check — verify the RPC endpoint is reachable before starting.
+ * Calls getSlot() as a lightweight ping.
+ */
+async function checkRpcHealth(rpcUrl) {
+  try {
+    const resp = await fetch(rpcUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'getSlot', params: [] }),
+      signal: AbortSignal.timeout(10000),
+    });
+    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+    const data = await resp.json();
+    if (data.error) throw new Error(data.error.message || JSON.stringify(data.error));
+    console.log(chalk.green(`  ✅ RPC OK — slot ${data.result}`));
+    return true;
+  } catch (err) {
+    console.log(chalk.red(`  ❌ RPC health check gagal: ${err.message}`));
+    console.log(chalk.yellow('  Pastikan SOLANA_RPC_URL di .env benar dan endpoint aktif.'));
+    return false;
+  }
+}
+  }
+}
+
 // ─── Banner ─────────────────────────────────────────────────────────────────
 
 function printBanner() {
@@ -85,7 +112,7 @@ function printBanner() {
 
   console.log(chalk.cyan(`
 ╔${'═'.repeat(62)}╗
-║          🔍 SOLANA WALLET CHECKER BOT v3.1 🔍                 ║
+║          🔍 SOLANA WALLET CHECKER BOT v${APP_VERSION} 🔍                 ║
 ║            Node.js + @solana/web3.js edition                   ║
 ║                                                                ║
 ║  Enhanced Analysis:                                            ║
@@ -266,6 +293,8 @@ async function analyzeTopHolders(tokenAddress) {
     let similarityAnalysis = null;
     let fundingAnalysis = null;
     let insiderGroups = [];
+    let fundingAna = null;
+    let insiderDetector = null;
 
     // Step 2: Run similarity analysis (mode 2 & 3)
     if (mode >= 2) {
@@ -280,7 +309,7 @@ async function analyzeTopHolders(tokenAddress) {
 
     // Step 3: Run funding chain analysis (mode 3)
     if (mode >= 3) {
-      const fundingAna = new FundingAnalyzer(rpcUrl, plan);
+      fundingAna = new FundingAnalyzer(rpcUrl, plan);
       fundingAnalysis = await fundingAna.analyzeFundingChains(holders);
       if (fundingAnalysis.totalClusters > 0) {
         console.log(chalk.green(`💰 Found ${fundingAnalysis.totalClusters} sybil cluster(s)`));
@@ -290,7 +319,7 @@ async function analyzeTopHolders(tokenAddress) {
       }
 
       // Step 4: Insider/Team Detection — combines ALL signals
-      const insiderDetector = new InsiderDetector(rpcUrl, plan.maxRps, plan);
+      insiderDetector = new InsiderDetector(rpcUrl, plan.maxRps, plan);
       console.log(chalk.cyan('\n🕵️  Running insider/team detection...'));
       const interHolderTransfers = await insiderDetector.detectInterHolderTransfers(holders);
 
@@ -313,7 +342,6 @@ async function analyzeTopHolders(tokenAddress) {
     // Append insider groups
     let insiderOutput = '';
     if (insiderGroups.length > 0 && mode >= 3) {
-      const insiderDetector = new InsiderDetector(rpcUrl, plan.maxRps, plan);
       insiderOutput = insiderDetector.formatInsiderOutput(insiderGroups, holders, fundingAnalysis);
       console.log(insiderOutput);
     }
@@ -321,7 +349,6 @@ async function analyzeTopHolders(tokenAddress) {
     // Append funding analysis to output if mode 3
     let fundingOutput = '';
     if (fundingAnalysis && mode >= 3) {
-      const fundingAna = new FundingAnalyzer(rpcUrl, plan);
       fundingOutput = fundingAna.formatFundingOutput(fundingAnalysis, holders);
       console.log(fundingOutput);
     }
@@ -463,6 +490,16 @@ async function analyzeFromCSV() {
 
 async function main() {
   printBanner();
+
+  // RPC health check
+  const rpcUrl = process.env.SOLANA_RPC_URL || 'https://api.mainnet-beta.solana.com';
+  console.log(chalk.gray(`  Checking RPC: ${rpcUrl.slice(0, 50)}...`));
+  const healthy = await checkRpcHealth(rpcUrl);
+  if (!healthy) {
+    const cont = await ask(chalk.yellow('\nLanjutkan tanpa RPC yang valid? [y/N] > '));
+    if (cont.toLowerCase() !== 'y') process.exit(1);
+  }
+  console.log('');
 
   console.log(chalk.white('Select operation mode:'));
   console.log('  1. Monitor Real-time Token Purchases (WebSocket)');

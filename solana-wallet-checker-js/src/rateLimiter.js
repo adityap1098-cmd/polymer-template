@@ -5,6 +5,8 @@
  * Uses a token bucket algorithm with queuing.
  */
 
+import { sleep } from './utils.js';
+
 export class RateLimiter {
   /**
    * @param {number} maxPerSecond - Maximum requests per second (default: 12)
@@ -110,6 +112,7 @@ export class RateLimitedRPC {
             method,
             params,
           }),
+          signal: AbortSignal.timeout(30000),
         });
 
         if (response.status === 429) {
@@ -162,8 +165,4 @@ export class RateLimitedRPC {
       totalErrors: this._errorCount,
     };
   }
-}
-
-function sleep(ms) {
-  return new Promise(resolve => setTimeout(resolve, ms));
 }

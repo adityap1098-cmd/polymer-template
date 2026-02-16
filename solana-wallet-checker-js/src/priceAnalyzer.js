@@ -127,8 +127,12 @@ export function extractEntryPriceFromTx(tx, wallet, tokenMint) {
 
 // ─── Price Fetcher (Multi-source: DexScreener → Jupiter fallback) ───────────
 
+/** Price cache — avoids redundant API calls within 60s */
+const _priceCache = new Map();
+const PRICE_CACHE_TTL = 60_000; // 60 seconds
+
 /**
- * Get current token price.
+ * Get current token price (with 60s cache).
  *
  * Sources (tried in order):
  * 1. DexScreener /tokens/v1 — free, no auth, returns priceUsd for any Solana pair
@@ -140,20 +144,35 @@ export function extractEntryPriceFromTx(tx, wallet, tokenMint) {
  * @returns {Promise<object|null>} { priceUSD, solPriceUSD, priceSOL }
  */
 export async function getCurrentPrice(tokenMint) {
+  // Check cache first
+  const cached = _priceCache.get(tokenMint);
+  if (cached && (Date.now() - cached.ts) < PRICE_CACHE_TTL) {
+    console.log('  ✅ Menggunakan harga dari cache');
+    return cached.data;
+  }
+
+  let result = null;
+
   // ── Source 1: DexScreener (free, reliable) ──
   try {
-    const result = await _fetchDexScreenerPrice(tokenMint);
-    if (result) return result;
+    result = await _fetchDexScreenerPrice(tokenMint);
   } catch { /* fall through */ }
 
   // ── Source 2: Jupiter Price API v2 (fallback) ──
-  try {
-    const result = await _fetchJupiterPrice(tokenMint);
-    if (result) return result;
-  } catch { /* fall through */ }
+  if (!result) {
+    try {
+      result = await _fetchJupiterPrice(tokenMint);
+    } catch { /* fall through */ }
+  }
 
-  console.log('  ⚠️ All price sources failed');
-  return null;
+  if (!result) {
+    console.log('  ⚠️ Semua sumber harga gagal');
+    return null;
+  }
+
+  // Store in cache
+  _priceCache.set(tokenMint, { data: result, ts: Date.now() });
+  return result;
 }
 
 /**
@@ -461,11 +480,11 @@ export function formatPnLOutput(pnlAnalysis, holders = []) {
 
   lines.push('');
   lines.push('╔' + '═'.repeat(78) + '╗');
-  lines.push('║  💰 ENTRY PRICE & PnL ANALYSIS                                               ║');
+  lines.push('║  💰 ANALISIS HARGA MASUK & PnL                                                ║');
   lines.push('╚' + '═'.repeat(78) + '╝');
   lines.push(`  Current Price:  ${fmtSOL(cp.priceSOL)} SOL (${fmtUSD(cp.priceUSD)})`);
   lines.push(`  SOL Price:      ${fmtUSD(cp.solPriceUSD)}`);
-  lines.push(`  Analyzed:       ${pnlAnalysis.totalAnalyzed}/${pnlAnalysis.totalHolders} holders (entry price detected)`);
+  lines.push(`  Dianalisis:     ${pnlAnalysis.totalAnalyzed}/${pnlAnalysis.totalHolders} holder (harga masuk terdeteksi)`);
   lines.push('');
 
   // ── EARLY BUYERS (bought cheap, still holding) ──
@@ -491,7 +510,7 @@ export function formatPnLOutput(pnlAnalysis, holders = []) {
   const losing = pnlAnalysis.topPnL.filter(h => h.pnl.pnlPercent <= 0);
 
   if (profitable.length > 0) {
-    lines.push('  📈 TOP PROFITABLE HOLDERS — Sorted by PnL%');
+    lines.push('  📈 HOLDER PALING UNTUNG — Diurutkan berdasarkan PnL%');
     lines.push('  ' + '─'.repeat(74));
     lines.push('  PnL%       | Entry (SOL)      | Value (SOL)   | PnL (SOL)    | Wallet');
     lines.push('  ' + '─'.repeat(74));
@@ -508,7 +527,7 @@ export function formatPnLOutput(pnlAnalysis, holders = []) {
 
   // Show losers briefly
   if (losing.length > 0) {
-    lines.push(`  📉 LOSING HOLDERS — ${losing.length} wallet(s) currently at loss`);
+    lines.push(`  📉 HOLDER RUGI — ${losing.length} wallet sedang merugi`);
     lines.push('  ' + '─'.repeat(74));
     for (const h of losing.slice(0, 10)) {
       const pnlPct = fmtPnLPercent(h.pnl.pnlPercent).padEnd(10);
@@ -520,7 +539,7 @@ export function formatPnLOutput(pnlAnalysis, holders = []) {
 
   // ── CROSS-REFERENCES ──
   if (pnlAnalysis.crossReferences.length > 0) {
-    lines.push('  🚨 CROSS-REFERENCE — Profitable wallets in suspicious groups');
+    lines.push('  🚨 CROSS-REFERENCE — Wallet untung di kelompok mencurigakan');
     lines.push('  ' + '─'.repeat(74));
 
     for (const ref of pnlAnalysis.crossReferences) {

@@ -23,6 +23,10 @@ import {
   extractEntryPriceFromTx, getCurrentPrice, calculateHolderPnL,
   analyzeEarlyBuyers, formatPnLOutput, SOL_MINT,
 } from './priceAnalyzer.js';
+import {
+  sleep, TOKEN_PROGRAM_ID, TOKEN_2022_PROGRAM_ID, APP_VERSION,
+  formatDate, truncateAddress, timestamp,
+} from './utils.js';
 import { writeFileSync, unlinkSync } from 'fs';
 import { PublicKey } from '@solana/web3.js';
 
@@ -1563,7 +1567,7 @@ describe('formatPnLOutput', () => {
     const pnlAnalysis = analyzeEarlyBuyers(holders, currentPrice, null, null);
     const output = formatPnLOutput(pnlAnalysis, holders);
 
-    assert.ok(output.includes('ENTRY PRICE & PnL ANALYSIS'), 'Should have PnL header');
+    assert.ok(output.includes('ANALISIS HARGA MASUK') || output.includes('ENTRY PRICE'), 'Should have PnL header');
     assert.ok(output.includes('Current Price'), 'Should show current price');
     assert.ok(output.includes('Ringkasan'), 'Should have summary');
   });
@@ -1600,5 +1604,143 @@ describe('formatPnLOutput', () => {
 describe('SOL_MINT constant', () => {
   it('should be the correct wrapped SOL mint', () => {
     assert.equal(SOL_MINT, 'So11111111111111111111111111111111111111112');
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// NEW TESTS — v3.2 additions
+// ═══════════════════════════════════════════════════════════════════════════
+
+describe('utils.js — shared utilities', () => {
+  it('sleep should return a promise', async () => {
+    const start = Date.now();
+    await sleep(50);
+    assert.ok(Date.now() - start >= 40, 'Should delay at least ~50ms');
+  });
+
+  it('TOKEN_PROGRAM_ID should be correct', () => {
+    assert.equal(TOKEN_PROGRAM_ID, 'TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA');
+  });
+
+  it('TOKEN_2022_PROGRAM_ID should be correct', () => {
+    assert.equal(TOKEN_2022_PROGRAM_ID, 'TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb');
+  });
+
+  it('APP_VERSION should be 3.2.0', () => {
+    assert.equal(APP_VERSION, '3.2.0');
+  });
+
+  it('formatDate should format Date objects', () => {
+    const d = new Date('2025-06-15T12:30:45.000Z');
+    assert.equal(formatDate(d), '2025-06-15 12:30:45');
+    assert.equal(formatDate(null), 'Unknown');
+  });
+
+  it('truncateAddress should shorten addresses', () => {
+    const addr = '5tzFkiKscXHK5ZXCGbXZxdw7gTjjD1mBwuoFbhUvuAi9';
+    const result = truncateAddress(addr);
+    assert.ok(result.includes('...'), 'Should have ellipsis');
+    assert.ok(result.length < addr.length, 'Should be shorter');
+    assert.equal(truncateAddress(null), 'Unknown');
+  });
+
+  it('timestamp should return HH:mm:ss format', () => {
+    const ts = timestamp();
+    assert.ok(/^\d{2}:\d{2}:\d{2}$/.test(ts), `Should be HH:mm:ss, got: ${ts}`);
+  });
+});
+
+describe('COPY_TRADER detection', () => {
+  it('should detect COPY_TRADER profile for high-freq multi-token wallets', () => {
+    // COPY_TRADER: txPerDay > 20 && uniqueTokenCount >= 10
+    const analyzer = new WalletAnalyzer(TEST_RPC);
+    const profile = analyzer._profileWallet({
+      uniqueTokenCount: 15,
+      walletAgeDays: 30,
+      txPerDay: 25,
+      totalTransactions: 750,
+    });
+    assert.equal(profile, WalletProfile.COPY_TRADER);
+  });
+
+  it('should not be COPY_TRADER if low token count', () => {
+    const analyzer = new WalletAnalyzer(TEST_RPC);
+    const profile = analyzer._profileWallet({
+      uniqueTokenCount: 3,
+      walletAgeDays: 30,
+      txPerDay: 25,
+      totalTransactions: 750,
+    });
+    assert.notEqual(profile, WalletProfile.COPY_TRADER);
+  });
+
+  it('should prefer SNIPER_BOT over COPY_TRADER if very high freq + low tokens', () => {
+    const analyzer = new WalletAnalyzer(TEST_RPC);
+    const profile = analyzer._profileWallet({
+      uniqueTokenCount: 2,
+      walletAgeDays: 10,
+      txPerDay: 60,
+      totalTransactions: 600,
+    });
+    assert.equal(profile, WalletProfile.SNIPER_BOT);
+  });
+});
+
+describe('Binance/Bybit map fix', () => {
+  it('should not have duplicate keys overwriting Binance', () => {
+    const binanceAddr = 'AC5RDfQFmDS1deWZos921JfqscXdByf8BKHs5ACWjtW2';
+    const result = identifyExchange(binanceAddr);
+    assert.ok(result.isExchange, 'Should be a known exchange');
+    assert.equal(result.name, 'Binance', 'Should be Binance, not Bybit');
+  });
+
+  it('should have Bybit as separate addresses', () => {
+    const bybitAddr = 'HdsLDfDdcWwj1qTRj2u88HuXpTFMoMCRjqN6CJ5LGX6v';
+    const result = identifyExchange(bybitAddr);
+    assert.ok(result.isExchange, 'Bybit should be recognized');
+    assert.equal(result.name, 'Bybit');
+  });
+});
+
+describe('New exchanges in EXCHANGE_WALLETS', () => {
+  it('should include HTX, Upbit, Crypto.com, Gemini, Backpack', () => {
+    const names = [...EXCHANGE_WALLETS.values()];
+    assert.ok(names.includes('HTX'), 'Should have HTX');
+    assert.ok(names.includes('Upbit'), 'Should have Upbit');
+    assert.ok(names.includes('Crypto.com'), 'Should have Crypto.com');
+    assert.ok(names.includes('Gemini'), 'Should have Gemini');
+    assert.ok(names.includes('Backpack'), 'Should have Backpack');
+  });
+});
+
+describe('getEntityLabel — checks KNOWN_PROGRAM_LABELS', () => {
+  it('should return program label for known program IDs', () => {
+    // Use Pump.fun Bonding Curve — in KNOWN_PROGRAM_LABELS but NOT in LIQUIDITY_PROGRAMS
+    const label = getEntityLabel('6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P');
+    assert.ok(label, 'Should return a label');
+    assert.ok(label.includes('Pump.fun'), 'Should be Pump.fun Bonding Curve');
+  });
+
+  it('should still return exchange labels first', () => {
+    const label = getEntityLabel('5tzFkiKscXHK5ZXCGbXZxdw7gTjjD1mBwuoFbhUvuAi9');
+    assert.ok(label, 'Should return a label');
+    assert.ok(label.includes('Binance'), 'Should be Binance');
+  });
+});
+
+describe('package.json version match', () => {
+  it('APP_VERSION should match package.json', async () => {
+    const pkg = JSON.parse((await import('fs')).readFileSync(
+      new URL('../package.json', import.meta.url), 'utf-8'
+    ));
+    assert.equal(pkg.version, APP_VERSION, 'package.json version should match APP_VERSION');
+  });
+
+  it('should not have dead dependencies', async () => {
+    const pkg = JSON.parse((await import('fs')).readFileSync(
+      new URL('../package.json', import.meta.url), 'utf-8'
+    ));
+    assert.ok(!pkg.dependencies.inquirer, 'inquirer should be removed');
+    assert.ok(!pkg.dependencies.bs58, 'bs58 should be removed');
   });
 });

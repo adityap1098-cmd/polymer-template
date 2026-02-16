@@ -1,6 +1,6 @@
 {
   "name": "solana-wallet-checker",
-  "version": "2.0.0",
+  "version": "3.2.0",
   "description": "Solana Wallet Checker Bot - Real-time token buyer classification (Node.js + @solana/web3.js)",
   "main": "src/main.js",
   "type": "module",
@@ -12,11 +12,9 @@
   "license": "MIT",
   "dependencies": {
     "@solana/web3.js": "^1.95.0",
-    "bs58": "^6.0.0",
     "chalk": "^5.3.0",
     "csv-parse": "^5.5.0",
     "dotenv": "^16.4.0",
-    "inquirer": "^9.2.0",
     "ws": "^8.16.0"
   }
 }
