@@ -34,6 +34,20 @@ function fmtPct(pct) {
   return '0%';
 }
 
+/** Shorten a Solana address for display: first 6 + last 4 */
+function shortAddr(addr) {
+  if (!addr || addr.length < 12) return addr || '?';
+  return addr.slice(0, 6) + '...' + addr.slice(-4);
+}
+
+/** Bubble size character based on supply percentage */
+function bubbleChar(pct) {
+  if (pct >= 5) return '⬤';
+  if (pct >= 1) return '◉';
+  if (pct >= 0.5) return '●';
+  return '○';
+}
+
 /**
  * Check if a Solana address is on the Ed25519 curve.
  * On-curve = could be a real user wallet (has a private key).
@@ -128,7 +142,7 @@ export class HolderAnalyzer {
    * @returns {Promise<Array>}
    */
   async getTokenHolders(tokenMint, limit = 50) {
-    console.log(`Fetching token accounts for ${tokenMint}...`);
+    console.log(`\n🔍 Fetching holders for ${tokenMint.slice(0, 12)}...`);
 
     // ── Fetch REAL total supply (critical for accurate percentages) ──
     let totalSupply = 0;
@@ -137,9 +151,7 @@ export class HolderAnalyzer {
       if (supplyResult?.value) {
         totalSupply = parseFloat(supplyResult.value.uiAmountString || supplyResult.value.uiAmount || '0');
       }
-      if (totalSupply > 0) {
-        console.log(`  📊 Total supply: ${totalSupply.toLocaleString('en-US', { maximumFractionDigits: 0 })} tokens`);
-      }
+      // totalSupply logged in report, not here
     } catch { /* will fall back to sum of analyzed holders */ }
 
     let rawAccounts = []; // Array of { tokenAccount, owner, balance (raw), decimals }
@@ -155,20 +167,20 @@ export class HolderAnalyzer {
     // ═══════════════════════════════════════════════════════════════════
 
     // ── Step 1: getTokenLargestAccounts (ALWAYS — guaranteed correct top ~20) ──
-    console.log('  ⚡ Fetching top holders via getTokenLargestAccounts...');
+    // Fetch top holders (quiet mode — minimal logs)
     try {
       const largest = await this.rpc.call('getTokenLargestAccounts', [tokenMint]);
       if (!largest || !largest.value || largest.value.length === 0) {
         console.log('  ⚠️ getTokenLargestAccounts returned no accounts');
       } else {
         const accounts = largest.value;
-        console.log(`  📊 getTokenLargestAccounts: ${accounts.length} largest accounts`);
+        // resolved silently
 
         // Resolve token accounts → owner wallets
         let resolved = false;
         if (this.config.useBatchAccounts) {
           const BATCH_LIMIT = this.config.batchAccountsLimit;
-          console.log(`  ⚡ Resolving owners via getMultipleAccounts (batch ${BATCH_LIMIT}/call)`);
+          // batch resolve owners
           const addresses = accounts.map(a => a.address).filter(Boolean);
           const amounts = new Map(accounts.map(a => [a.address, parseFloat(a.amount || '0')]));
 
@@ -223,15 +235,12 @@ export class HolderAnalyzer {
               const decimals = info.tokenAmount?.decimals || 0;
               rawAccounts.push({ tokenAccount: address, owner, balance: amount, decimals });
 
-              if ((i + 1) % 5 === 0) {
-                console.log(`  Processed ${i + 1}/${accounts.length} accounts...`);
-              }
+              // progress tracked silently
             } catch { continue; }
           }
         }
 
         rawAccounts.sort((a, b) => b.balance - a.balance);
-        console.log(`  ✅ Top ${rawAccounts.length} holders resolved from getTokenLargestAccounts`);
       }
     } catch (err) {
       console.log(`  ⚠️ getTokenLargestAccounts failed: ${err.message}`);
@@ -246,7 +255,7 @@ export class HolderAnalyzer {
 
       // ── DAS: getTokenAccounts (paginated, fetch ALL to sort correctly) ──
       if (this.config.useDASTokenAccounts) {
-        console.log(`  📡 Expanding holders via DAS getTokenAccounts (have ${rawAccounts.length}, need ${limit})...`);
+        // DAS expansion (quiet)
         try {
           // Get token decimals via DAS getAsset
           let tokenDecimals = 0;
@@ -304,9 +313,9 @@ export class HolderAnalyzer {
             const topDas = dasAccounts.slice(0, needed);
             rawAccounts.push(...topDas);
             rawAccounts.sort((a, b) => b.balance - a.balance);
-            console.log(`  📊 DAS expansion: +${topDas.length} holders from ${dasAccounts.length} DAS accounts (${page} pages)`);
+            // DAS expanded
           } else {
-            console.log(`  📊 DAS: no additional holders found beyond getTokenLargestAccounts`);
+            // no additional DAS holders
           }
         } catch (err) {
           console.log(`  ⚠️ DAS getTokenAccounts failed (${err.message})`);
@@ -315,7 +324,7 @@ export class HolderAnalyzer {
 
       // ── getProgramAccounts (Build/paid plan only) ──
       if (this.config.useProgramAccounts && rawAccounts.length < limit) {
-        console.log(`  ⚡ Expanding via getProgramAccounts (paid plan, full holder scan)...`);
+        // getProgramAccounts expansion (quiet)
         try {
           const result = await this.rpc.call('getProgramAccounts', [
             TOKEN_PROGRAM_ID,
@@ -329,7 +338,7 @@ export class HolderAnalyzer {
           ]);
 
           if (result && Array.isArray(result) && result.length > 0) {
-            console.log(`  📊 getProgramAccounts returned ${result.length} total token accounts`);
+            // getProgramAccounts success
             const programAccounts = [];
             for (const entry of result) {
               const info = entry.account?.data?.parsed?.info;
@@ -378,7 +387,7 @@ export class HolderAnalyzer {
               programAccounts.sort((a, b) => b.balance - a.balance);
               rawAccounts.push(...programAccounts);
               rawAccounts.sort((a, b) => b.balance - a.balance);
-              console.log(`  📊 getProgramAccounts expansion: +${programAccounts.length} holders`);
+              // expansion merged silently
             }
           }
         } catch (err) {
@@ -389,11 +398,11 @@ export class HolderAnalyzer {
 
     // ── Fallback: If getTokenLargestAccounts failed, try DAS or getProgramAccounts as primary ──
     if (rawAccounts.length === 0) {
-      console.log('  ⚠️ getTokenLargestAccounts unavailable, trying fallback methods...');
+      // fallback silently
 
       // Try DAS as primary fallback (fetch all pages, sort locally)
       if (this.config.useDASTokenAccounts) {
-        console.log('  📡 Fallback: DAS getTokenAccounts (full scan)...');
+        // DAS fallback
         try {
           let tokenDecimals = 0;
           try {
@@ -439,7 +448,7 @@ export class HolderAnalyzer {
 
           if (rawAccounts.length > 0) {
             rawAccounts.sort((a, b) => b.balance - a.balance);
-            console.log(`  📊 DAS fallback: ${rawAccounts.length} holders (${page} pages), sorted by balance`);
+            // DAS fallback complete
           }
         } catch (err) {
           console.log(`  ⚠️ DAS fallback failed: ${err.message}`);
@@ -449,7 +458,7 @@ export class HolderAnalyzer {
 
       // Try getProgramAccounts as last resort
       if (this.config.useProgramAccounts && rawAccounts.length === 0) {
-        console.log('  📡 Fallback: getProgramAccounts (paid plan)...');
+        // getProgramAccounts fallback
         try {
           const result = await this.rpc.call('getProgramAccounts', [
             TOKEN_PROGRAM_ID,
@@ -476,7 +485,7 @@ export class HolderAnalyzer {
               });
             }
             rawAccounts.sort((a, b) => b.balance - a.balance);
-            console.log(`  📊 getProgramAccounts fallback: ${rawAccounts.length} holders`);
+            // getProgramAccounts fallback complete
           }
         } catch (err) {
           console.log(`  ⚠️ getProgramAccounts fallback failed: ${err.message}`);
@@ -521,7 +530,7 @@ export class HolderAnalyzer {
       unknownOwners.push(owner);
     }
 
-    console.log(`  Static filter: ${filteredEntities.length} known entities removed, ${holders.length} remaining`);
+    // static filter done
 
     // ═══════════════════════════════════════════════════════════════════
     // PHASE 2.5: isOnCurve Instant PDA Filter (FREE — zero RPC calls)
@@ -544,7 +553,7 @@ export class HolderAnalyzer {
       }
 
       if (offCurveHolders.length > 0) {
-        console.log(`  🎯 isOnCurve filter: ${offCurveHolders.length} off-curve addresses (PDAs) detected instantly (0 RPC calls)`);
+        // isOnCurve filter done
         for (const holder of offCurveHolders) {
           filteredEntities.push({
             owner: holder.owner,
@@ -562,7 +571,7 @@ export class HolderAnalyzer {
         unknownOwners.length = 0;
         unknownOwners.push(...onCurveHolders.map(h => h.owner));
 
-        console.log(`  ✅ After isOnCurve: ${holders.length} on-curve wallets remain`);
+        // on-curve wallets identified
       }
     }
 
@@ -576,7 +585,7 @@ export class HolderAnalyzer {
     if (holders.length > limit * 3) {
       holders.sort((a, b) => b.balance - a.balance);
       const preLimit = limit * 3;
-      console.log(`  ✂️ Pre-limiting: ${holders.length} → top ${preLimit} by balance (for PDA check efficiency)`);
+      // pre-limited for efficiency
       holders.length = preLimit;
       unknownOwners.length = 0;
       unknownOwners.push(...holders.map(h => h.owner));
@@ -591,7 +600,7 @@ export class HolderAnalyzer {
     // ═══════════════════════════════════════════════════════════════════
 
     if (this.config.detectProgramOwned && unknownOwners.length > 0) {
-      console.log(`  🔎 Verifying ownership of ${unknownOwners.length} on-curve wallets via getMultipleAccounts...`);
+      // PDA batch verification
 
       const pdaDetected = new Map(); // owner → { programId, label }
 
@@ -636,10 +645,6 @@ export class HolderAnalyzer {
       }
 
       if (pdaDetected.size > 0) {
-        console.log(`  🎯 Detected ${pdaDetected.size} program-owned wallets (PDAs):`);
-        for (const [addr, info] of pdaDetected) {
-          console.log(`     ↳ ${info.label}: ${addr.slice(0, 16)}...`);
-        }
 
         // Upgrade labels of off-curve PDAs that were generic "🤖 PDA (off-curve)"
         for (const ent of filteredEntities) {
@@ -672,18 +677,11 @@ export class HolderAnalyzer {
     }
 
     if (filteredEntities.length > 0) {
-      console.log(`🔍 Total filtered: ${filteredEntities.length} non-human entities`);
-      const showEntities = filteredEntities.slice(0, 20);
-      for (const ent of showEntities) {
-        console.log(`   ↳ ${ent.label}${ent.balance > 0 ? ` — ${ent.balance.toLocaleString('en-US', { maximumFractionDigits: 0 })} tokens` : ''}`);
-      }
-      if (filteredEntities.length > 20) {
-        console.log(`   ... and ${filteredEntities.length - 20} more`);
-      }
+      console.log(`  🔍 Filtered: ${filteredEntities.length} non-human entities`);
     }
 
     if (holders.length === 0) return { holders: [], filteredEntities };
-    console.log(`After filtering: ${holders.length} valid human holders`);
+    // After filtering — count shown in main progress
 
     holders.sort((a, b) => b.balance - a.balance);
     const topHolders = holders.slice(0, limit);
@@ -749,7 +747,7 @@ export class HolderAnalyzer {
       const hist = topHolders[lastIdx].historicalTokenCount || 0;
       const ep = topHolders[lastIdx].entryPriceSol;
       const epStr = ep != null && ep > 0 ? ` entry=${ep.toExponential(2)}SOL` : '';
-      console.log(`  Holder info: ${lastIdx + 1}/${topHolders.length} | ${topHolders[lastIdx].owner.slice(0, 12)}... age=${topHolders[lastIdx].walletAgeDays}d tokens=${hist} (${curr} held + ${hist - curr} history)${epStr}`);
+      // progress tracked by batch
     }
 
     const stats = this.rpc.getStats();
@@ -1050,7 +1048,7 @@ export class HolderAnalyzer {
    * @returns {Promise<object>}
    */
   async analyzeHolderSimilarities(holders, currentToken) {
-    console.log(`\n🔍 Analyzing trading patterns for ${holders.length} holders (Jaccard method)...`);
+    // Similarity analysis
 
     // Use pre-fetched token data from getTokenHolders, or fetch if missing
     let fetchedCount = 0;
@@ -1058,7 +1056,6 @@ export class HolderAnalyzer {
     for (let i = 0; i < holders.length; i++) {
       if (holders[i].tradedTokens && holders[i].tradedTokens.size > 0) {
         cachedCount++;
-        console.log(`   [${i + 1}/${holders.length}] ${holders[i].owner.slice(0, 12)}... → ${holders[i].tradedTokens.size} tokens (cached)`);
       } else {
         // Fallback: combined current + historical
         try {
@@ -1072,11 +1069,10 @@ export class HolderAnalyzer {
           holders[i].tradedTokens = new Set();
           holders[i].tokenCount = 0;
         }
-        console.log(`   [${i + 1}/${holders.length}] ${holders[i].owner.slice(0, 12)}... → ${holders[i].tradedTokens.size} tokens (fetched)`);
       }
     }
 
-    console.log(`✅ Token data ready! (${cachedCount} cached, ${fetchedCount} fetched)\n`);
+    // similarity data ready
 
     // Compute pairwise Jaccard similarities
     const similarities = new Map();
@@ -1630,168 +1626,219 @@ export class HolderAnalyzer {
     }
 
     // ═══════════════════════════════════════════════════════════════════
-    // SECTION 2: RISK DISTRIBUTION BAR
+    // SECTION 2: RISK DISTRIBUTION + SUPPLY BAR
     // ═══════════════════════════════════════════════════════════════════
-    lines.push(`📊 Risk Distribution: 🔴 ${riskSummary['🔴 CRITICAL']} Critical | 🟠 ${riskSummary['🟠 HIGH']} High | 🟡 ${riskSummary['🟡 MEDIUM']} Medium | 🟢 ${riskSummary['🟢 LOW']} Low`);
+    const analyzedPct = effectiveSupply > 0 ? (totalBalance / effectiveSupply * 100) : 100;
+    const barFull = Math.round(analyzedPct / 100 * 30);
+    const supplyBar = '█'.repeat(barFull) + '░'.repeat(30 - barFull);
+    lines.push(`  ${supplyBar} ${analyzedPct.toFixed(1)}% of supply analyzed`);
+    lines.push(`  📊 Risk: 🔴 ${riskSummary['🔴 CRITICAL']} Critical | 🟠 ${riskSummary['🟠 HIGH']} High | 🟡 ${riskSummary['🟡 MEDIUM']} Medium | 🟢 ${riskSummary['🟢 LOW']} Low`);
     lines.push('');
 
     // ═══════════════════════════════════════════════════════════════════
-    // SECTION 3: TOP RISK HOLDERS (detail for score >= 35, compact for rest)
-    // ═══════════════════════════════════════════════════════════════════
-    lines.push('═'.repeat(80));
-    lines.push('  TOP RISK HOLDERS (Score ≥ 35)');
-    lines.push('═'.repeat(80));
-
-    let detailCount = 0;
-    const lowRiskHolders = [];
-
-    for (let idx = 0; idx < sorted.length; idx++) {
-      const holder = sorted[idx];
-      const risk = holder.riskData;
-      const percentage = effectiveSupply > 0 ? (holder.balance / effectiveSupply * 100) : 0;
-
-      if (risk.score >= 35) {
-        detailCount++;
-        const age = holder.walletAgeDays !== null && holder.walletAgeDays !== undefined
-          ? `${holder.walletAgeDays}d` : '?';
-        const totalTokens = holder.historicalTokenCount || holder.tokenCount || 0;
-        const heldTokens = holder.tokenCount || 0;
-
-        lines.push('');
-        lines.push(`  #${String(detailCount).padStart(2)} ${risk.level} — Score: ${risk.score}/100`);
-        lines.push(`  ${holder.owner}`);
-        lines.push(`  ${holder.balance.toLocaleString('en-US', { maximumFractionDigits: 0 })} tokens (${fmtPct(percentage)}) | Age: ${age} | Tokens: ${totalTokens} (${heldTokens} held)`);
-        if (holder.purchaseTimeStr && holder.purchaseTimeStr !== 'Unknown') {
-          lines.push(`  First Buy: ${holder.purchaseTimeStr}`);
-        }
-        if (holder.entryPriceSol != null && holder.entryPriceSol > 0) {
-          const ep = holder.entryPriceSol;
-          const epStr = ep < 0.000001 ? ep.toExponential(2) : ep.toFixed(8);
-          const solStr = holder.solSpent != null ? ` (${holder.solSpent.toFixed(4)} SOL spent)` : '';
-          lines.push(`  Entry Price: ${epStr} SOL/token${solStr}`);
-        }
-        for (const factor of risk.factors) lines.push(`    → ${factor}`);
-      } else {
-        lowRiskHolders.push(holder);
-      }
-    }
-
-    // Compact table for low-risk holders
-    if (lowRiskHolders.length > 0) {
-      lines.push('');
-      lines.push('─'.repeat(80));
-      lines.push('  OTHER HOLDERS (Score < 35)');
-      lines.push('─'.repeat(80));
-      lines.push('  Score | %Supply | Age  | Tokens | Wallet');
-      lines.push('  ' + '─'.repeat(75));
-
-      for (const holder of lowRiskHolders) {
-        const pct = effectiveSupply > 0 ? (holder.balance / effectiveSupply * 100) : 0;
-        const age = holder.walletAgeDays !== null && holder.walletAgeDays !== undefined
-          ? `${holder.walletAgeDays}d`.padEnd(4) : '?   ';
-        const totalTokens = holder.historicalTokenCount || holder.tokenCount || 0;
-        lines.push(`  ${String(holder.riskData.score).padStart(5)} | ${fmtPct(pct).padStart(8)} | ${age} | ${String(totalTokens).padStart(5)} | ${holder.owner}`);
-      }
-      lines.push('  (Token count = total unique tokens ever traded, excl. universal)');
-    }
-
-    lines.push('');
-    lines.push('═'.repeat(80));
-    const supplyLine = totalSupply > 0
-      ? `  Analyzed: ${totalBalance.toLocaleString('en-US', { maximumFractionDigits: 0 })} tokens across ${holders.length} holders (Total Supply: ${effectiveSupply.toLocaleString('en-US', { maximumFractionDigits: 0 })})`
-      : `  Total: ${totalBalance.toLocaleString('en-US', { maximumFractionDigits: 0 })} tokens across ${holders.length} holders`;
-    lines.push(supplyLine);
-    lines.push('═'.repeat(80));
-
-    // ═══════════════════════════════════════════════════════════════════
-    // SECTION 4: SYBIL & SIMILARITY CLUSTERS (combined, concise)
+    // SECTION 3: 🗺️ BUBBLE MAP — Holder Network Visualization
     // ═══════════════════════════════════════════════════════════════════
     const hasSybil = fundingAnalysis?.clusters?.length > 0;
     const hasSimilarity = similarityAnalysis?.groups?.length > 0;
     const hasTiming = similarityAnalysis?.timingClusters?.length > 0;
 
     if (hasSybil || hasSimilarity || hasTiming) {
-      lines.push('');
       lines.push('╔' + '═'.repeat(78) + '╗');
-      lines.push('║  🔗 CLUSTER & PATTERN ANALYSIS                                               ║');
+      lines.push('║  🗺️  BUBBLE MAP — Holder Connections                                         ║');
       lines.push('╚' + '═'.repeat(78) + '╝');
-    }
-
-    // Sybil clusters
-    if (hasSybil) {
+      lines.push('  Legend: ⬤ >5%  ◉ 1-5%  ● 0.5-1%  ○ <0.5%    Risk: 🔴≥70  🟠≥50  🟡≥30  🟢<30');
       lines.push('');
-      lines.push(`  🚨 SYBIL CLUSTERS — ${fundingAnalysis.clusters.length} detected (${fmtPct(sybilPct)} of supply)`);
-      lines.push('  ' + '─'.repeat(70));
 
-      for (let i = 0; i < fundingAnalysis.clusters.length; i++) {
-        const cluster = fundingAnalysis.clusters[i];
-        const clusterBal = holders.filter(h => cluster.wallets.includes(h.owner))
-          .reduce((s, h) => s + h.balance, 0);
-        const clusterPct = effectiveSupply > 0 ? (clusterBal / effectiveSupply * 100) : 0;
+      const assignedWallets = new Set();
 
-        const funderLabel = cluster.funder ? (getEntityLabel(cluster.funder) || '') : '';
-        const typeStr = cluster.type === 'INTER_HOLDER_FUNDING'
-          ? '⚠️  HOLDERS FUNDING EACH OTHER'
-          : `Funder: ${cluster.funder} ${funderLabel}`;
+      // ── Sybil clusters (strongest signal — shared funder) ──
+      if (hasSybil) {
+        for (let i = 0; i < fundingAnalysis.clusters.length; i++) {
+          const cluster = fundingAnalysis.clusters[i];
+          const clusterBal = holders.filter(h => cluster.wallets.includes(h.owner))
+            .reduce((s, h) => s + h.balance, 0);
+          const clusterPct = effectiveSupply > 0 ? (clusterBal / effectiveSupply * 100) : 0;
 
-        lines.push(`\n  Cluster #${i + 1} — ${cluster.walletCount} wallets — ${fmtPct(clusterPct)} supply — ${typeStr}`);
-        for (const wallet of cluster.wallets) {
-          const hi = holders.find(h => h.owner === wallet);
-          const walletPct = hi && effectiveSupply > 0 ? (hi.balance / effectiveSupply * 100) : 0;
-          lines.push(`    ${wallet}  (${fmtPct(walletPct)})`);
+          const funderLabel = cluster.funder ? (getEntityLabel(cluster.funder) || '') : '';
+          const funderShort = cluster.funder ? shortAddr(cluster.funder) : '?';
+          const typeStr = cluster.type === 'INTER_HOLDER_FUNDING'
+            ? '⚠️  Inter-holder funding'
+            : `${funderLabel || funderShort}`;
+
+          lines.push(`  ── CLUSTER ${String.fromCharCode(65 + i)}: ${typeStr} ── ${fmtPct(clusterPct)} supply ──`);
+          lines.push('  │');
+
+          const walletInfos = cluster.wallets
+            .map(w => ({ wallet: w, holder: holders.find(h => h.owner === w) }))
+            .filter(x => x.holder)
+            .sort((a, b) => b.holder.balance - a.holder.balance);
+
+          for (let wi = 0; wi < walletInfos.length; wi++) {
+            const { wallet, holder: hi } = walletInfos[wi];
+            const pct = effectiveSupply > 0 ? (hi.balance / effectiveSupply * 100) : 0;
+            const risk = hi.riskData || { level: '🟢 LOW', score: 0 };
+            const riskIcon = risk.level.split(' ')[0];
+            const connector = wi === walletInfos.length - 1 ? '└──' : '├──';
+            lines.push(`  ${connector} ${bubbleChar(pct)} ${fmtPct(pct).padEnd(7)} ${shortAddr(wallet)}  ${riskIcon}${risk.score}`);
+            assignedWallets.add(wallet);
+          }
+          lines.push('');
         }
+      }
+
+      // ── Similarity groups (only those not fully covered by sybil) ──
+      if (hasSimilarity) {
+        let simIdx = 0;
+        for (const group of similarityAnalysis.groups) {
+          // Skip if all wallets already shown in sybil clusters
+          const unshown = group.wallets.filter(w => !assignedWallets.has(w));
+          if (unshown.length === 0) continue;
+
+          simIdx++;
+          const groupBal = holders.filter(h => group.wallets.includes(h.owner))
+            .reduce((s, h) => s + h.balance, 0);
+          const groupPct = effectiveSupply > 0 ? (groupBal / effectiveSupply * 100) : 0;
+
+          let jLabel;
+          if (group.avgJaccard >= 0.8) jLabel = '🔴 IDENTICAL';
+          else if (group.avgJaccard >= 0.4) jLabel = '🟠 HIGH';
+          else jLabel = '🟡 MODERATE';
+
+          const sharedStr = group.commonTokenCount > 0
+            ? `, ${group.commonTokenCount} shared tokens` : '';
+          lines.push(`  ── SIMILAR #${simIdx}: J=${group.avgJaccard} ${jLabel}${sharedStr} ── ${fmtPct(groupPct)} supply ──`);
+          lines.push('  │');
+
+          const walletInfos = group.wallets
+            .map(w => ({ wallet: w, holder: holders.find(h => h.owner === w) }))
+            .filter(x => x.holder)
+            .sort((a, b) => b.holder.balance - a.holder.balance);
+
+          for (let wi = 0; wi < walletInfos.length; wi++) {
+            const { wallet, holder: hi } = walletInfos[wi];
+            const pct = effectiveSupply > 0 ? (hi.balance / effectiveSupply * 100) : 0;
+            const risk = hi.riskData || { level: '🟢 LOW', score: 0 };
+            const riskIcon = risk.level.split(' ')[0];
+            const inSybil = assignedWallets.has(wallet) ? ' *' : '';
+            const connector = wi === walletInfos.length - 1 ? '└──' : '├──';
+            lines.push(`  ${connector} ${bubbleChar(pct)} ${fmtPct(pct).padEnd(7)} ${shortAddr(wallet)}  ${riskIcon}${risk.score}${inSybil}`);
+            assignedWallets.add(wallet);
+          }
+          lines.push('');
+        }
+      }
+
+      // ── Timing clusters ──
+      if (hasTiming) {
+        for (let ti = 0; ti < similarityAnalysis.timingClusters.length; ti++) {
+          const tc = similarityAnalysis.timingClusters[ti];
+          const spreadStr = tc.spreadSeconds < 60
+            ? `${tc.spreadSeconds}s` : `${Math.round(tc.spreadSeconds / 60)}min`;
+          lines.push(`  ── TIMING #${ti + 1}: ${tc.count} wallets within ${spreadStr} ──`);
+          lines.push('  │');
+          for (let wi = 0; wi < tc.wallets.length; wi++) {
+            const wallet = tc.wallets[wi];
+            const hi = holders.find(h => h.owner === wallet);
+            const pct = hi && effectiveSupply > 0 ? (hi.balance / effectiveSupply * 100) : 0;
+            const connector = wi === tc.wallets.length - 1 ? '└──' : '├──';
+            lines.push(`  ${connector} ${bubbleChar(pct)} ${fmtPct(pct).padEnd(7)} ${shortAddr(wallet)}`);
+          }
+          lines.push('');
+        }
+      }
+
+      // ── Unlinked holders summary ──
+      const unlinkedHolders = holders
+        .filter(h => !assignedWallets.has(h.owner))
+        .sort((a, b) => b.balance - a.balance);
+      if (unlinkedHolders.length > 0) {
+        const unlinkedBal = unlinkedHolders.reduce((s, h) => s + h.balance, 0);
+        const unlinkedPct = effectiveSupply > 0 ? (unlinkedBal / effectiveSupply * 100) : 0;
+        lines.push(`  ── UNLINKED (${unlinkedHolders.length} wallets, ${fmtPct(unlinkedPct)}) ──`);
+        lines.push('  │');
+        const showCount = Math.min(5, unlinkedHolders.length);
+        for (let i = 0; i < showCount; i++) {
+          const h = unlinkedHolders[i];
+          const pct = effectiveSupply > 0 ? (h.balance / effectiveSupply * 100) : 0;
+          const risk = h.riskData || { level: '🟢 LOW', score: 0 };
+          const riskIcon = risk.level.split(' ')[0];
+          const connector = (i === showCount - 1 && unlinkedHolders.length <= 5) ? '└──' : '├──';
+          lines.push(`  ${connector} ${bubbleChar(pct)} ${fmtPct(pct).padEnd(7)} ${shortAddr(h.owner)}  ${riskIcon}${risk.score}`);
+        }
+        if (unlinkedHolders.length > 5) {
+          const restBal = unlinkedHolders.slice(5).reduce((s, h) => s + h.balance, 0);
+          const restPct = effectiveSupply > 0 ? (restBal / effectiveSupply * 100) : 0;
+          lines.push(`  └── ... ${unlinkedHolders.length - 5} more (${fmtPct(restPct)})`);
+        }
+        lines.push('');
       }
     }
 
-    // Similarity groups
-    if (hasSimilarity) {
+    // ═══════════════════════════════════════════════════════════════════
+    // SECTION 4: TOP RISK HOLDERS
+    // ═══════════════════════════════════════════════════════════════════
+    const highRiskHolders = sorted.filter(h => h.riskData.score >= 35);
+    const lowRiskHolders = sorted.filter(h => h.riskData.score < 35);
+
+    lines.push('═'.repeat(80));
+    lines.push(`  🚨 TOP RISK HOLDERS (${highRiskHolders.length} with Score ≥ 35)`);
+    lines.push('═'.repeat(80));
+
+    for (let idx = 0; idx < highRiskHolders.length; idx++) {
+      const holder = highRiskHolders[idx];
+      const risk = holder.riskData;
+      const percentage = effectiveSupply > 0 ? (holder.balance / effectiveSupply * 100) : 0;
+      const age = holder.walletAgeDays !== null && holder.walletAgeDays !== undefined
+        ? `${holder.walletAgeDays}d` : '?';
+      const totalTokens = holder.historicalTokenCount || holder.tokenCount || 0;
+      const heldTokens = holder.tokenCount || 0;
+      const riskIcon = risk.level.split(' ')[0];
+
       lines.push('');
-      lines.push(`  🔍 TRADING SIMILARITY — ${similarityAnalysis.totalGroups} group(s) (Jaccard method)`);
-      lines.push('  ' + '─'.repeat(70));
+      lines.push(`  #${idx + 1}  ${riskIcon} ${risk.score}/100  ${holder.owner}`);
 
-      for (let gi = 0; gi < similarityAnalysis.groups.length; gi++) {
-        const group = similarityAnalysis.groups[gi];
-        const groupBal = holders.filter(h => group.wallets.includes(h.owner))
-          .reduce((s, h) => s + h.balance, 0);
-        const groupPct = effectiveSupply > 0 ? (groupBal / effectiveSupply * 100) : 0;
+      // Holdings line
+      let infoLine = `      ${holder.balance.toLocaleString('en-US', { maximumFractionDigits: 0 })} tokens (${fmtPct(percentage)}) | Age: ${age} | ${totalTokens} tokens (${heldTokens} held)`;
+      if (holder.entryPriceSol != null && holder.entryPriceSol > 0) {
+        const ep = holder.entryPriceSol;
+        const epStr = ep < 0.000001 ? ep.toExponential(2) : ep.toFixed(8);
+        const solStr = holder.solSpent != null ? ` (${holder.solSpent.toFixed(0)} SOL spent)` : '';
+        infoLine += `\n      Entry: ${epStr} SOL/token${solStr}`;
+      }
+      lines.push(infoLine);
 
-        let jLabel;
-        if (group.avgJaccard >= 0.8) jLabel = '🔴 NEAR IDENTICAL';
-        else if (group.avgJaccard >= 0.4) jLabel = '🟠 HIGH OVERLAP';
-        else jLabel = '🟡 MODERATE';
+      // Compact risk factors on one line
+      const compactFactors = risk.factors.map(f => {
+        // Strip emoji and trim, then abbreviate
+        return f.replace(/^→\s*/, '').replace(/^\s+/, '');
+      });
+      lines.push(`      ${compactFactors.join(' · ')}`);
+    }
 
-        lines.push(`\n  Group #${gi + 1} — ${group.walletCount} wallets — J=${group.avgJaccard} ${jLabel} — ${fmtPct(groupPct)} supply`);
-        for (const wallet of group.wallets) {
-          const hi = holders.find(h => h.owner === wallet);
-          const walletPct = hi && effectiveSupply > 0 ? (hi.balance / effectiveSupply * 100) : 0;
-          lines.push(`    ${wallet}  (${fmtPct(walletPct)})`);
-        }
-        if (group.commonTokens && group.commonTokens.length > 0) {
-          const shown = group.commonTokens.slice(0, 3);
-          const extra = group.commonTokenCount > 3 ? ` +${group.commonTokenCount - 3} more` : '';
-          lines.push(`    Shared: ${shown.join(', ')}${extra}`);
-        }
+    // Compact table for low-risk holders
+    if (lowRiskHolders.length > 0) {
+      lines.push('');
+      lines.push('─'.repeat(80));
+      lines.push(`  OTHER (${lowRiskHolders.length} holders, Score < 35)`);
+      lines.push('─'.repeat(80));
+      lines.push('  Score │ Supply │  Age │ Wallet');
+      lines.push('  ──────┼────────┼──────┼' + '─'.repeat(50));
+
+      for (const holder of lowRiskHolders) {
+        const pct = effectiveSupply > 0 ? (holder.balance / effectiveSupply * 100) : 0;
+        const age = holder.walletAgeDays !== null && holder.walletAgeDays !== undefined
+          ? `${holder.walletAgeDays}d`.padStart(4) : '   ?';
+        lines.push(`  ${String(holder.riskData.score).padStart(5)} │ ${fmtPct(pct).padStart(6)} │ ${age} │ ${shortAddr(holder.owner)}`);
       }
     }
 
-    // Timing clusters
-    if (hasTiming) {
-      lines.push('');
-      lines.push(`  ⏱️  COORDINATED BUYS — ${similarityAnalysis.timingClusters.length} cluster(s) detected`);
-      lines.push('  ' + '─'.repeat(70));
-
-      for (let ti = 0; ti < similarityAnalysis.timingClusters.length; ti++) {
-        const tc = similarityAnalysis.timingClusters[ti];
-        const spreadStr = tc.spreadSeconds < 60
-          ? `${tc.spreadSeconds}s` : `${Math.round(tc.spreadSeconds / 60)}min`;
-
-        lines.push(`\n  Cluster #${ti + 1} — ${tc.count} wallets within ${spreadStr}`);
-        lines.push(`  ${tc.earliest.toISOString().replace('T', ' ').split('.')[0]} → ${tc.latest.toISOString().replace('T', ' ').split('.')[0]}`);
-        for (const wallet of tc.wallets) {
-          lines.push(`    ${wallet}`);
-        }
-      }
-    }
+    lines.push('');
+    lines.push('═'.repeat(80));
+    const supplyLine = totalSupply > 0
+      ? `  ${totalBalance.toLocaleString('en-US', { maximumFractionDigits: 0 })} / ${effectiveSupply.toLocaleString('en-US', { maximumFractionDigits: 0 })} tokens (${analyzedPct.toFixed(1)}%) across ${holders.length} holders`
+      : `  ${totalBalance.toLocaleString('en-US', { maximumFractionDigits: 0 })} tokens across ${holders.length} holders`;
+    lines.push(supplyLine);
+    lines.push('═'.repeat(80));
 
     lines.push('');
     return lines.join('\n');

@@ -86,8 +86,7 @@ async function checkRpcHealth(rpcUrl) {
       });
       if (resp.status === 429) {
         const wait = 1000 * attempt;
-        console.log(chalk.yellow(`  ⏳ Rate limited (429), retry ${attempt}/3 dalam ${wait}ms...`));
-        await sleep(wait);
+        await sleep(1000 * attempt);
         continue;
       }
       if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
@@ -95,13 +94,12 @@ async function checkRpcHealth(rpcUrl) {
       if (data.error) {
         if (data.error.code === 429 || String(data.error.message).includes('429')) {
           const wait = 1000 * attempt;
-          console.log(chalk.yellow(`  ⏳ Rate limited, retry ${attempt}/3 dalam ${wait}ms...`));
-          await sleep(wait);
+          await sleep(1000 * attempt);
           continue;
         }
         throw new Error(data.error.message || JSON.stringify(data.error));
       }
-      console.log(chalk.green(`  ✅ RPC OK — slot ${data.result}`));
+      console.log(chalk.green(`  ✅ RPC OK`));
       return true;
     } catch (err) {
       if (attempt < 3 && err.message?.includes('429')) {
@@ -145,8 +143,6 @@ function printBanner() {
 ╚${'═'.repeat(62)}╝
 `));
   console.log(chalk.gray(`  Plan: ${plan.description}`));
-  console.log(chalk.gray(`  Rate: ${plan.maxRps} req/s | Concurrency: ${plan.holderConcurrency || 3} | TX scan: ${plan.txHistoryPerWallet}/wallet | Funding: ${plan.fundingHops}-hop`));
-  console.log(chalk.gray(`  APIs: ${apiStr}`));
   console.log('');
 }
 
@@ -276,12 +272,9 @@ async function analyzeTopHolders(tokenAddress) {
   const maxHolders = plan.useProgramAccounts ? 200 : 50;
   console.log(chalk.yellow('\nHow many top holders to analyze?'));
   if (plan.useProgramAccounts) {
-    console.log(`  ⚡ Paid plan: getProgramAccounts unlocks ALL holders (up to ${maxHolders})`);
     console.log(`  Recommended: 50-100 (balanced speed & coverage), Max: ${maxHolders}`);
   } else {
-    console.log(`  Recommended: 15-20 (balanced speed and coverage)`);
-    console.log('  ℹ️  Top ~20 from getTokenLargestAccounts, DAS expands beyond 20 if needed');
-    console.log(`  Maximum: ${maxHolders}`);
+    console.log(`  Recommended: 15-20, Maximum: ${maxHolders}`);
   }
 
   const holderInput = await ask(chalk.green(`\nNumber of holders [default: ${plan.topHolders}] > `));
@@ -371,17 +364,15 @@ async function analyzeTopHolders(tokenAddress) {
     // Append funding analysis to output if mode 3
     let fundingOutput = '';
     if (fundingAnalysis && mode >= 3) {
-      fundingOutput = fundingAna.formatFundingOutput(fundingAnalysis, holders);
+      fundingOutput = fundingAna.formatFundingOutput(fundingAnalysis, holders, totalSupply);
       console.log(fundingOutput);
     }
 
     // ── PnL & Early Buyer Analysis (mode ≥ 2) ──
     let pnlOutput = '';
     if (mode >= 2) {
-      console.log(chalk.cyan('\n💰 Fetching current price from Jupiter...'));
       const currentPrice = await getCurrentPrice(tokenAddress);
       if (currentPrice) {
-        console.log(chalk.green(`  ✅ Price: ${currentPrice.priceSOL.toExponential(2)} SOL ($${currentPrice.priceUSD.toExponential(2)})`));
         const pnlAnalysis = analyzeEarlyBuyers(holders, currentPrice, similarityAnalysis, fundingAnalysis);
         pnlOutput = formatPnLOutput(pnlAnalysis, holders);
         console.log(pnlOutput);
@@ -513,9 +504,8 @@ async function analyzeFromCSV() {
 async function main() {
   printBanner();
 
-  // RPC health check
+  // RPC health check (silent)
   const rpcUrl = process.env.SOLANA_RPC_URL || 'https://api.mainnet-beta.solana.com';
-  console.log(chalk.gray(`  Checking RPC: ${rpcUrl.slice(0, 50)}...`));
   const healthy = await checkRpcHealth(rpcUrl);
   if (!healthy) {
     const cont = await ask(chalk.yellow('\nLanjutkan tanpa RPC yang valid? [y/N] > '));

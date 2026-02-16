@@ -35,7 +35,7 @@ export class FundingAnalyzer {
    */
   async analyzeFundingChains(holders) {
     const maxHops = this.config.fundingHops;
-    console.log(`\n💰 Analyzing funding chains for ${holders.length} wallets (${maxHops}-hop)...`);
+    console.log(`  💰 Tracing funding chains (${maxHops}-hop)...`);
 
     const fundingMap = new Map(); // wallet → { funder, chain: [...], fundedAt, fundingAmount }
 
@@ -88,7 +88,7 @@ export class FundingAnalyzer {
       }
 
       if ((i + 1) % 3 === 0 || i === holders.length - 1) {
-        console.log(`   Funding chain: ${i + 1}/${holders.length} analyzed`);
+        // progress tracked silently
       }
     }
 
@@ -345,91 +345,140 @@ export class FundingAnalyzer {
    * @param {Array} holders
    * @returns {string}
    */
-  formatFundingOutput(analysis, holders) {
+  formatFundingOutput(analysis, holders, totalSupply = 0) {
     const lines = [];
+    const sh = (addr) => addr && addr.length >= 12 ? addr.slice(0, 6) + '...' + addr.slice(-4) : (addr || '?');
+    const bc = (pct) => pct >= 5 ? '⬤' : pct >= 1 ? '◉' : pct >= 0.5 ? '●' : '○';
+    const fp = (n) => n >= 10 ? n.toFixed(1) + '%' : n >= 1 ? n.toFixed(2) + '%' : n.toFixed(3) + '%';
+    const totalBalance = holders.reduce((s, h) => s + h.balance, 0);
+    const effectiveSupply = totalSupply > 0 ? totalSupply : totalBalance;
+
     lines.push('');
     lines.push('╔' + '═'.repeat(78) + '╗');
-    lines.push('║  💰 FUNDING CHAIN ANALYSIS                                                   ║');
+    lines.push('║  💰 FUNDING CHAIN                                                            ║');
     lines.push('╚' + '═'.repeat(78) + '╝');
 
-    // ── Quick summary of known vs unknown funders ──
-    let knownCount = 0;
-    let unknownCount = 0;
-    let entityFunded = 0;
-
+    // Quick summary
+    let tracedCount = 0, unknownCount = 0, entityCount = 0;
     for (const holder of holders) {
       const data = analysis.fundingMap.get(holder.owner);
       if (!data || !data.funder) { unknownCount++; continue; }
-      const label = getEntityLabel(data.funder);
-      if (label) entityFunded++;
-      knownCount++;
+      if (getEntityLabel(data.funder)) entityCount++;
+      tracedCount++;
     }
-
-    lines.push(`  Traced: ${knownCount}/${holders.length} | Unknown origin: ${unknownCount} | From known entity: ${entityFunded}`);
+    lines.push('');
+    lines.push(`  Traced: ${tracedCount}/${holders.length} | Unknown: ${unknownCount} | Known entity: ${entityCount}`);
     lines.push('');
 
-    // ── Funding table (compact) ──
-    lines.push('  FUNDING ORIGINS:');
-    lines.push('  ' + '─'.repeat(75));
+    // ── Group by ultimate funder (root of chain) ──
+    const groupByRoot = new Map();
+    const unknownHolders = [];
 
     for (const holder of holders) {
       const data = analysis.fundingMap.get(holder.owner);
-      if (!data) continue;
+      const pct = effectiveSupply > 0 ? (holder.balance / effectiveSupply * 100) : 0;
 
-      const wallet = holder.owner;
-      if (!data.funder) {
-        lines.push(`  ${wallet}`);
-        lines.push(`    ← Unknown`);
+      if (!data || !data.funder) {
+        unknownHolders.push({ holder, pct });
         continue;
       }
 
-      const funderLabel = getEntityLabel(data.funder);
-      const labelStr = funderLabel ? ` ${funderLabel}` : '';
-      const amount = data.fundingAmountSOL > 0 ? `${data.fundingAmountSOL.toFixed(4)} SOL` : '';
-      const time = data.fundedAt
-        ? data.fundedAt.toISOString().replace('T', ' ').split('.')[0].slice(5)
-        : '';
-      const timeAmount = [time, amount].filter(Boolean).join(' | ');
-
-      lines.push(`  ${wallet}`);
-      let funderLine = `    ← ${data.funder}${labelStr}`;
-      if (timeAmount) funderLine += `  [${timeAmount}]`;
-
-      // Show full chain (all hops)
+      // Find root funder (end of chain)
+      let root = data.funder;
       if (data.chain && data.chain.length >= 2) {
-        for (let h = 1; h < data.chain.length; h++) {
-          const hopData = data.chain[h];
-          const hopLabel = getEntityLabel(hopData.from);
-          const hopStr = hopLabel ? ` ${hopLabel}` : '';
-          funderLine += `\n      ${'  '.repeat(h)}← ${hopData.from}${hopStr}`;
-        }
+        root = data.chain[data.chain.length - 1].from;
       } else if (data.funderOfFunder) {
-        // Legacy 2-hop fallback
-        const hop2Label = getEntityLabel(data.funderOfFunder);
-        const hop2Str = hop2Label ? ` ${hop2Label}` : '';
-        funderLine += `\n      ← ${data.funderOfFunder}${hop2Str}`;
+        root = data.funderOfFunder;
       }
-      lines.push(funderLine);
+
+      if (!groupByRoot.has(root)) groupByRoot.set(root, []);
+      groupByRoot.get(root).push({ holder, data, pct });
     }
 
-    // Sybil clusters — skip here, already shown in main output
-    // Just show sniper patterns
-    if (analysis.sniperPatterns.length > 0) {
-      lines.push('');
-      lines.push('  🎯 SNIPER PATTERNS (funded ≤1hr before buy):');
-      lines.push('  ' + '─'.repeat(75));
-      for (const s of analysis.sniperPatterns) {
-        const sniperFunderLabel = getEntityLabel(s.funder);
-        const funderNote = sniperFunderLabel ? ` ${sniperFunderLabel}` : '';
-        lines.push(`  ${s.wallet}`);
-        lines.push(`    funded ${s.minutesBetween}min before buy — ${s.fundingAmountSOL.toFixed(4)} SOL from ${s.funder}${funderNote}`);
-        if (sniperFunderLabel && sniperFunderLabel.includes('🏦')) {
-          lines.push(`    ℹ️  Exchange withdrawal — likely normal behavior`);
+    // Separate into known entities, multi-funded clusters, and unique wallets
+    const knownGroups = [];
+    const multiGroups = [];
+    const uniqueWallets = [];
+
+    for (const [root, members] of groupByRoot.entries()) {
+      const label = getEntityLabel(root);
+      const totalPct = members.reduce((s, m) => s + m.pct, 0);
+      members.sort((a, b) => b.pct - a.pct);
+
+      if (label) {
+        knownGroups.push({ rootAddr: root, label, members, totalPct });
+      } else if (members.length >= 2) {
+        multiGroups.push({ rootAddr: root, label: `Shared funder`, members, totalPct });
+      } else {
+        uniqueWallets.push({ ...members[0], funderAddr: root });
+      }
+    }
+
+    knownGroups.sort((a, b) => b.totalPct - a.totalPct);
+    multiGroups.sort((a, b) => b.totalPct - a.totalPct);
+
+    // ── FROM KNOWN ENTITIES ──
+    const allGroups = [...knownGroups, ...multiGroups];
+    if (allGroups.length > 0) {
+      lines.push('  ── FROM KNOWN ENTITIES ' + '─'.repeat(54));
+      for (const group of allGroups) {
+        const tag = group.label || `Cluster (${sh(group.rootAddr)})`;
+        lines.push(`  ${tag} (${sh(group.rootAddr)})  ${group.members.length} wallet${group.members.length > 1 ? 's' : ''}, ${fp(group.totalPct)}`);
+        for (let mi = 0; mi < group.members.length; mi++) {
+          const { holder: h, data: d, pct } = group.members[mi];
+          const isLast = mi === group.members.length - 1;
+          const prefix = isLast ? '└──' : '├──';
+          const time = d.fundedAt ? d.fundedAt.toISOString().replace('T', ' ').split('.')[0].slice(5, 16) : '';
+          const amount = d.fundingAmountSOL > 0 ? ` ${d.fundingAmountSOL.toFixed(2)} SOL` : '';
+          const via = (d.chain && d.chain.length >= 2) ? ` via ${sh(d.funder)}` : '';
+          lines.push(`    ${prefix} ${bc(pct)} ${fp(pct).padEnd(7)} ${sh(h.owner)}${via}${time ? `  [${time}]` : ''}${amount}`);
         }
+        lines.push('');
       }
     }
 
-    lines.push('\n' + '='.repeat(80));
+    // ── SNIPERS ──
+    if (analysis.sniperPatterns.length > 0) {
+      lines.push('  ── 🎯 SNIPERS (funded ≤1hr before buy) ' + '─'.repeat(38));
+      for (const s of analysis.sniperPatterns) {
+        const h = holders.find(x => x.owner === s.wallet);
+        const pct = h && effectiveSupply > 0 ? (h.balance / effectiveSupply * 100) : 0;
+        const fLabel = getEntityLabel(s.funder);
+        const note = fLabel?.includes('🏦') ? ' (exchange)' : '';
+        lines.push(`  ${bc(pct)} ${fp(pct).padEnd(7)} ${sh(s.wallet)} ← ${sh(s.funder)}${note}  ${s.fundingAmountSOL.toFixed(2)} SOL, ${s.minutesBetween}min before buy`);
+      }
+      lines.push('');
+    }
+
+    // ── UNIQUE WALLETS (top 5 + summary) ──
+    if (uniqueWallets.length > 0) {
+      uniqueWallets.sort((a, b) => b.pct - a.pct);
+      lines.push(`  ── FROM UNIQUE WALLETS (${uniqueWallets.length}) ` + '─'.repeat(Math.max(1, 48 - String(uniqueWallets.length).length)));
+      const showN = Math.min(5, uniqueWallets.length);
+      for (let i = 0; i < showN; i++) {
+        const { holder: h, data: d, pct } = uniqueWallets[i];
+        const time = d.fundedAt ? d.fundedAt.toISOString().replace('T', ' ').split('.')[0].slice(5, 16) : '';
+        const amount = d.fundingAmountSOL > 0 ? ` ${d.fundingAmountSOL.toFixed(2)} SOL` : '';
+        lines.push(`  ${bc(pct)} ${fp(pct).padEnd(7)} ${sh(h.owner)} ← ${sh(d.funder)}${time ? `  [${time}]` : ''}${amount}`);
+      }
+      if (uniqueWallets.length > 5) {
+        lines.push(`  ... +${uniqueWallets.length - 5} lainnya`);
+      }
+      lines.push('');
+    }
+
+    // ── UNKNOWN ORIGIN (compact) ──
+    if (unknownHolders.length > 0) {
+      unknownHolders.sort((a, b) => b.pct - a.pct);
+      lines.push(`  ── UNKNOWN ORIGIN (${unknownHolders.length} wallets) ` + '─'.repeat(Math.max(1, 44 - String(unknownHolders.length).length)));
+      const chunks = unknownHolders.map(u => `${bc(u.pct)} ${fp(u.pct)} ${sh(u.holder.owner)}`);
+      const showChunks = chunks.slice(0, 6);
+      lines.push('  ' + showChunks.join(' | '));
+      if (chunks.length > 6) lines.push(`  ... +${chunks.length - 6} lainnya`);
+      lines.push('');
+    }
+
+    lines.push('═'.repeat(80));
     return lines.join('\n');
   }
 }

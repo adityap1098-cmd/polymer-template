@@ -44,8 +44,8 @@ export class InsiderDetector {
    * @returns {Promise<Array<{from, to, amountSOL, timestamp}>>}
    */
   async detectInterHolderTransfers(holders) {
-    console.log(`\n🔗 Checking inter-holder SOL & token transfers (${holders.length} wallets, last ${this.interHolderTxScan} tx each)...`);
-    if (this.useEnhancedTx) console.log('  ⚡ Using getTransactionsForAddress (fast mode)');
+    // Check inter-holder transfers
+    // fast mode flag
     const holderSet = new Set(holders.map(h => h.owner));
     const transfers = [];
 
@@ -184,7 +184,7 @@ export class InsiderDetector {
       } catch { continue; }
 
       if ((i + 1) % 5 === 0 || i === holders.length - 1) {
-        console.log(`   Transfer scan: ${i + 1}/${holders.length}`);
+        // transfer scan progress silent
       }
     }
 
@@ -199,7 +199,7 @@ export class InsiderDetector {
       }
     }
 
-    console.log(`   Found ${unique.length} inter-holder transfers (SOL: ${unique.filter(t => t.type === 'SOL').length}, Token: ${unique.filter(t => t.type === 'TOKEN').length})`);
+    // transfer scan complete
     return unique;
   }
 
@@ -215,7 +215,7 @@ export class InsiderDetector {
   async detectSNSDomains(holders) {
     if (!this.useSNS) return new Map();
 
-    console.log(`\n🏷️  Checking SNS .sol domains for ${holders.length} wallets...`);
+    // Check SNS domains
     const domainMap = new Map();
 
     for (const holder of holders) {
@@ -228,9 +228,9 @@ export class InsiderDetector {
     }
 
     if (domainMap.size > 0) {
-      console.log(`   Found ${domainMap.size} wallet(s) with .sol domain(s)`);
+      // domains found
     } else {
-      console.log(`   No .sol domains found`);
+      // no domains
     }
 
     return domainMap;
@@ -539,9 +539,14 @@ export class InsiderDetector {
     const effectiveSupply = totalSupply > 0 ? totalSupply : totalBalance;
     const holderMap = new Map(holders.map(h => [h.owner, h]));
 
+    /** Shorten address */
+    const sh = (addr) => addr && addr.length >= 12 ? addr.slice(0, 6) + '...' + addr.slice(-4) : (addr || '?');
+    /** Bubble char */
+    const bc = (pct) => pct >= 5 ? '⬤' : pct >= 1 ? '◉' : pct >= 0.5 ? '●' : '○';
+
     lines.push('');
     lines.push('╔' + '═'.repeat(78) + '╗');
-    lines.push('║  🕵️  SUSPECTED INSIDER / TEAM GROUPS                                         ║');
+    lines.push('║  🕵️  INSIDER / TEAM DETECTION                                                ║');
     lines.push('╚' + '═'.repeat(78) + '╝');
 
     if (insiderGroups.length === 0) {
@@ -557,78 +562,60 @@ export class InsiderDetector {
     const highConfidence = insiderGroups.filter(g => g.confidence >= 45).length;
 
     lines.push('');
-    lines.push(`  📊 ${insiderGroups.length} grup terdeteksi — ${totalInsiderWallets} wallets — ${fmtPct(totalInsiderSupply)} supply`);
-    if (highConfidence > 0) {
-      lines.push(`  ⚠️  ${highConfidence} grup dengan kepercayaan tinggi (≥45%)`);
-    }
+    lines.push(`  📊 ${insiderGroups.length} grup — ${totalInsiderWallets} wallets — ${fmtPct(totalInsiderSupply)} supply${highConfidence > 0 ? ` — ⚠️ ${highConfidence} high confidence` : ''}`);
     lines.push('');
 
     for (let gi = 0; gi < insiderGroups.length; gi++) {
       const group = insiderGroups[gi];
-      lines.push('  ┌' + '─'.repeat(76) + '┐');
-      lines.push(`  │ GRUP #${gi + 1} — ${group.confidenceLabel}`);
-      lines.push(`  │ Confidence: ${group.confidence}/100 | ${group.walletCount} wallets | ${fmtPct(group.supplyPct)} supply`);
-      lines.push('  ├' + '─'.repeat(76) + '┤');
 
-      // Signals (evidence)
-      lines.push('  │ BUKTI:');
+      lines.push('  ┌──── GRUP #' + (gi + 1) + ' ' + group.confidenceLabel + ' (' + group.confidence + '/100) ── ' + group.walletCount + ' wallets, ' + fmtPct(group.supplyPct) + ' ────');
+
+      // Signals on one line each (compact)
       for (const signal of group.signals) {
-        lines.push(`  │   ${signal}`);
+        lines.push(`  │  ${signal}`);
       }
-
-      // Members
       lines.push('  │');
-      lines.push('  │ ANGGOTA:');
-      for (const wallet of group.wallets) {
-        const h = holderMap.get(wallet);
+
+      // Members — show top 5 by balance, summarize rest
+      const sortedMembers = group.wallets
+        .map(w => ({ wallet: w, holder: holderMap.get(w) }))
+        .filter(x => x.holder)
+        .sort((a, b) => b.holder.balance - a.holder.balance);
+
+      const showCount = Math.min(5, sortedMembers.length);
+      for (let mi = 0; mi < showCount; mi++) {
+        const { wallet, holder: h } = sortedMembers[mi];
         const pct = h && effectiveSupply > 0 ? (h.balance / effectiveSupply * 100) : 0;
         const age = h?.walletAgeDays != null ? `${h.walletAgeDays}d` : '?';
-        const tokens = h?.historicalTokenCount || h?.tokenCount || (h?.tradedTokens?.size ?? '?');
         const score = h?.riskData?.score ?? '?';
-        lines.push(`  │   ${wallet}  ${fmtPct(pct)} | Age:${age} | Tok:${tokens} | Risk:${score}`);
+        lines.push(`  │  ${bc(pct)} ${fmtPct(pct).padEnd(7)} ${sh(wallet)}  Age:${age.padEnd(5)} Risk:${score}`);
+      }
+      if (sortedMembers.length > 5) {
+        const restBal = sortedMembers.slice(5).reduce((s, x) => s + (x.holder?.balance || 0), 0);
+        const restPct = effectiveSupply > 0 ? (restBal / effectiveSupply * 100) : 0;
+        lines.push(`  │  ... +${sortedMembers.length - 5} wallets (${fmtPct(restPct)})`);
       }
 
-      // Shared tokens
-      if (group.evidence.sharedTokens.size > 0) {
-        lines.push('  │');
-        lines.push(`  │ TOKEN YANG SAMA (${group.evidence.sharedTokens.size}):`);
-        const tokenList = [...group.evidence.sharedTokens].slice(0, 5);
-        for (const t of tokenList) {
-          lines.push(`  │   • ${t}`);
-        }
-        if (group.evidence.sharedTokens.size > 5) {
-          lines.push(`  │   ... +${group.evidence.sharedTokens.size - 5} lainnya`);
-        }
-      }
-
-      // Funders
+      // Funders (compact)
       if (group.evidence.funders.size > 0) {
-        lines.push('  │');
-        lines.push('  │ SUMBER DANA:');
-        for (const funder of group.evidence.funders) {
-          const label = getEntityLabel(funder) || '';
-          lines.push(`  │   ← ${funder} ${label}`);
-        }
+        const funderList = [...group.evidence.funders].map(f => {
+          const label = getEntityLabel(f);
+          return label ? `${sh(f)} ${label}` : sh(f);
+        });
+        lines.push(`  │  💰 Funder: ${funderList.join(', ')}`);
       }
 
-      // Transfers
+      // Transfers (compact — count only)
       if (group.evidence.transfers.length > 0) {
-        lines.push('  │');
-        lines.push('  │ TRANSFER ANTAR-HOLDER:');
-        for (const t of group.evidence.transfers) {
-          const timeStr = t.timestamp
-            ? t.timestamp.toISOString().replace('T', ' ').split('.')[0].slice(5)
-            : '';
-          if (t.type === 'TOKEN') {
-            const mint = t.tokenMint ? t.tokenMint.slice(0, 8) + '...' : '?';
-            lines.push(`  │   🪙 ${t.tokenAmount?.toFixed(2) || '?'} token (${mint}) ${timeStr ? `[${timeStr}]` : ''}`);
-          } else {
-            lines.push(`  │   ${(t.amountSOL || 0).toFixed(4)} SOL ${timeStr ? `[${timeStr}]` : ''}`);
-          }
-        }
+        const solTx = group.evidence.transfers.filter(t => t.type !== 'TOKEN').length;
+        const tokTx = group.evidence.transfers.filter(t => t.type === 'TOKEN').length;
+        const parts = [];
+        if (solTx > 0) parts.push(`${solTx} SOL`);
+        if (tokTx > 0) parts.push(`${tokTx} token`);
+        lines.push(`  │  🔄 ${parts.join(' + ')} transfer(s) antar-holder`);
       }
 
-      lines.push('  └' + '─'.repeat(76) + '┘');
+      lines.push('  └' + '─'.repeat(76));
       lines.push('');
     }
 
