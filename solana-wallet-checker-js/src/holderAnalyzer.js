@@ -23,6 +23,18 @@ import { extractEntryPriceFromTx } from './priceAnalyzer.js';
 import { TOKEN_PROGRAM_ID, TOKEN_2022_PROGRAM_ID } from './utils.js';
 
 /**
+ * Format a percentage for display. Handles very small values nicely.
+ * @param {number} pct - percentage value (e.g., 2.08 or 0.000068)
+ * @returns {string}
+ */
+function fmtPct(pct) {
+  if (pct >= 0.01) return pct.toFixed(2) + '%';
+  if (pct >= 0.0001) return pct.toFixed(4) + '%';
+  if (pct > 0) return '<0.0001%';
+  return '0%';
+}
+
+/**
  * Check if a Solana address is on the Ed25519 curve.
  * On-curve = could be a real user wallet (has a private key).
  * Off-curve = guaranteed PDA (Program Derived Address) = not a human.
@@ -117,6 +129,18 @@ export class HolderAnalyzer {
    */
   async getTokenHolders(tokenMint, limit = 50) {
     console.log(`Fetching token accounts for ${tokenMint}...`);
+
+    // ── Fetch REAL total supply (critical for accurate percentages) ──
+    let totalSupply = 0;
+    try {
+      const supplyResult = await this.rpc.call('getTokenSupply', [tokenMint]);
+      if (supplyResult?.value) {
+        totalSupply = parseFloat(supplyResult.value.uiAmountString || supplyResult.value.uiAmount || '0');
+      }
+      if (totalSupply > 0) {
+        console.log(`  📊 Total supply: ${totalSupply.toLocaleString('en-US', { maximumFractionDigits: 0 })} tokens`);
+      }
+    } catch { /* will fall back to sum of analyzed holders */ }
 
     let rawAccounts = []; // Array of { tokenAccount, owner, balance (raw), decimals }
 
@@ -609,7 +633,7 @@ export class HolderAnalyzer {
 
     const stats = this.rpc.getStats();
     console.log(`✅ Done! (${stats.totalRequests} RPC calls, ${stats.totalErrors} rate limits hit)`);
-    return { holders: topHolders, filteredEntities };
+    return { holders: topHolders, filteredEntities, totalSupply };
   }
 
   // ─── Wallet Age Analysis ────────────────────────────────────────────────
@@ -997,15 +1021,16 @@ export class HolderAnalyzer {
    * 
    * Total: 0-100
    */
-  calculateRiskScore(holder, allHolders, similarityAnalysis = null, fundingAnalysis = null) {
+  calculateRiskScore(holder, allHolders, similarityAnalysis = null, fundingAnalysis = null, totalSupply = 0) {
     let riskScore = 0;
     const riskFactors = [];
     const wallet = holder.owner;
     const balance = holder.balance;
     const tokenCount = holder.tokenCount || 0;
 
-    const totalSupply = allHolders.reduce((sum, h) => sum + h.balance, 0);
-    const holderPercentage = totalSupply > 0 ? (balance / totalSupply * 100) : 0;
+    // Use real totalSupply if available, otherwise fall back to sum of analyzed holders
+    const effectiveSupply = totalSupply > 0 ? totalSupply : allHolders.reduce((sum, h) => sum + h.balance, 0);
+    const holderPercentage = effectiveSupply > 0 ? (balance / effectiveSupply * 100) : 0;
 
     // ── Factor 1: Token Diversity (0-15 pts) ──
     if (tokenCount === 0) {
@@ -1154,17 +1179,19 @@ export class HolderAnalyzer {
    * @param {object} fundingAnalysis
    * @returns {object}
    */
-  calculateTokenHealth(holders, similarityAnalysis = null, fundingAnalysis = null) {
+  calculateTokenHealth(holders, similarityAnalysis = null, fundingAnalysis = null, totalSupply = 0) {
     const balances = holders.map(h => h.balance);
     const totalBalance = balances.reduce((s, v) => s + v, 0);
+    // Use real totalSupply for concentration metrics (fall back to sum of analyzed)
+    const effectiveSupply = totalSupply > 0 ? totalSupply : totalBalance;
 
     // Gini coefficient
     const gini = calculateGini(balances);
 
     // Top holder concentration
     const sorted = [...balances].sort((a, b) => b - a);
-    const top5Pct = totalBalance > 0 ? (sorted.slice(0, 5).reduce((s, v) => s + v, 0) / totalBalance * 100) : 0;
-    const top10Pct = totalBalance > 0 ? (sorted.slice(0, 10).reduce((s, v) => s + v, 0) / totalBalance * 100) : 0;
+    const top5Pct = effectiveSupply > 0 ? (sorted.slice(0, 5).reduce((s, v) => s + v, 0) / effectiveSupply * 100) : 0;
+    const top10Pct = effectiveSupply > 0 ? (sorted.slice(0, 10).reduce((s, v) => s + v, 0) / effectiveSupply * 100) : 0;
 
     // Average wallet age
     const ages = holders.filter(h => h.walletAgeDays != null).map(h => h.walletAgeDays);
@@ -1392,17 +1419,19 @@ export class HolderAnalyzer {
    * @param {object|null} fundingAnalysis
    * @returns {string}
    */
-  formatHoldersOutput(holders, tokenMint, similarityAnalysis = null, fundingAnalysis = null, filteredEntities = []) {
+  formatHoldersOutput(holders, tokenMint, similarityAnalysis = null, fundingAnalysis = null, filteredEntities = [], totalSupply = 0) {
     const lines = [];
 
     // Compute risk scores
     for (const holder of holders) {
-      holder.riskData = this.calculateRiskScore(holder, holders, similarityAnalysis, fundingAnalysis);
+      holder.riskData = this.calculateRiskScore(holder, holders, similarityAnalysis, fundingAnalysis, totalSupply);
     }
 
     // Token Health Overview
-    const health = this.calculateTokenHealth(holders, similarityAnalysis, fundingAnalysis);
+    const health = this.calculateTokenHealth(holders, similarityAnalysis, fundingAnalysis, totalSupply);
     const totalBalance = holders.reduce((sum, h) => sum + h.balance, 0);
+    // Use real totalSupply for all percentage calculations
+    const effectiveSupply = totalSupply > 0 ? totalSupply : totalBalance;
     const sorted = [...holders].sort((a, b) => b.riskData.score - a.riskData.score);
     const riskSummary = { '🔴 CRITICAL': 0, '🟠 HIGH': 0, '🟡 MEDIUM': 0, '🟢 LOW': 0 };
     for (const holder of holders) riskSummary[holder.riskData.level]++;
@@ -1413,7 +1442,7 @@ export class HolderAnalyzer {
       for (const c of fundingAnalysis.clusters) c.wallets.forEach(w => sybilWallets.add(w));
     }
     const sybilBalance = holders.filter(h => sybilWallets.has(h.owner)).reduce((s, h) => s + h.balance, 0);
-    const sybilPct = totalBalance > 0 ? (sybilBalance / totalBalance * 100).toFixed(1) : '0';
+    const sybilPct = effectiveSupply > 0 ? (sybilBalance / effectiveSupply * 100) : 0;
 
     // Calculate similarity controlled %
     const simWallets = new Set();
@@ -1421,7 +1450,7 @@ export class HolderAnalyzer {
       for (const g of similarityAnalysis.groups) g.wallets.forEach(w => simWallets.add(w));
     }
     const simBalance = holders.filter(h => simWallets.has(h.owner)).reduce((s, h) => s + h.balance, 0);
-    const simPct = totalBalance > 0 ? (simBalance / totalBalance * 100).toFixed(1) : '0';
+    const simPct = effectiveSupply > 0 ? (simBalance / effectiveSupply * 100) : 0;
 
     // ═══════════════════════════════════════════════════════════════════
     // SECTION 1: HEADER + QUICK VERDICT
@@ -1441,13 +1470,13 @@ export class HolderAnalyzer {
     lines.push(`│  Overall:   ${health.tokenRiskLevel} (${health.tokenRiskScore}/100)`);
     lines.push(`│  Holders:   ${holders.length} analyzed${filteredEntities.length > 0 ? `, ${filteredEntities.length} filtered (exchanges/DEX/bots)` : ''}`);
     lines.push(`│  Gini:      ${health.gini} ${health.gini >= 0.7 ? '⚠️  HIGHLY CONCENTRATED' : health.gini >= 0.4 ? '— moderate concentration' : '— well distributed'}`);
-    lines.push(`│  Top 5:     ${health.top5Concentration}% of supply`);
+    lines.push(`│  Top 5:     ${fmtPct(health.top5Concentration)} of supply`);
     lines.push(`│  Fresh:     ${health.freshWallets}/${holders.length} wallets ≤7 days old (${(health.freshWallets / Math.max(1, holders.length) * 100).toFixed(0)}%)`);
     if (health.sybilClusterCount > 0) {
-      lines.push(`│  Sybil:     ${health.sybilClusterCount} cluster(s) — ${health.walletsInSybil} wallets control ${sybilPct}%`);
+      lines.push(`│  Sybil:     ${health.sybilClusterCount} cluster(s) — ${health.walletsInSybil} wallets control ${fmtPct(sybilPct)}`);
     }
     if (similarityAnalysis?.totalGroups > 0) {
-      lines.push(`│  Similar:   ${similarityAnalysis.totalGroups} group(s) — ${simWallets.size} wallets share trading patterns (${simPct}%)`);
+      lines.push(`│  Similar:   ${similarityAnalysis.totalGroups} group(s) — ${simWallets.size} wallets share trading patterns (${fmtPct(simPct)})`);
     }
     if (health.timingClusterCount > 0) {
       lines.push(`│  Timing:    ${health.timingClusterCount} cluster(s) — coordinated buys detected`);
@@ -1498,7 +1527,7 @@ export class HolderAnalyzer {
     for (let idx = 0; idx < sorted.length; idx++) {
       const holder = sorted[idx];
       const risk = holder.riskData;
-      const percentage = totalBalance > 0 ? (holder.balance / totalBalance * 100) : 0;
+      const percentage = effectiveSupply > 0 ? (holder.balance / effectiveSupply * 100) : 0;
 
       if (risk.score >= 35) {
         detailCount++;
@@ -1510,7 +1539,7 @@ export class HolderAnalyzer {
         lines.push('');
         lines.push(`  #${String(detailCount).padStart(2)} ${risk.level} — Score: ${risk.score}/100`);
         lines.push(`  ${holder.owner}`);
-        lines.push(`  ${holder.balance.toLocaleString('en-US', { maximumFractionDigits: 0 })} tokens (${percentage.toFixed(2)}%) | Age: ${age} | Tokens: ${totalTokens} (${heldTokens} held)`);
+        lines.push(`  ${holder.balance.toLocaleString('en-US', { maximumFractionDigits: 0 })} tokens (${fmtPct(percentage)}) | Age: ${age} | Tokens: ${totalTokens} (${heldTokens} held)`);
         if (holder.purchaseTimeStr && holder.purchaseTimeStr !== 'Unknown') {
           lines.push(`  First Buy: ${holder.purchaseTimeStr}`);
         }
@@ -1536,18 +1565,21 @@ export class HolderAnalyzer {
       lines.push('  ' + '─'.repeat(75));
 
       for (const holder of lowRiskHolders) {
-        const pct = totalBalance > 0 ? (holder.balance / totalBalance * 100).toFixed(1) : '0';
+        const pct = effectiveSupply > 0 ? (holder.balance / effectiveSupply * 100) : 0;
         const age = holder.walletAgeDays !== null && holder.walletAgeDays !== undefined
           ? `${holder.walletAgeDays}d`.padEnd(4) : '?   ';
         const totalTokens = holder.historicalTokenCount || holder.tokenCount || 0;
-        lines.push(`  ${String(holder.riskData.score).padStart(5)} | ${pct.padStart(6)}% | ${age} | ${String(totalTokens).padStart(5)} | ${holder.owner}`);
+        lines.push(`  ${String(holder.riskData.score).padStart(5)} | ${fmtPct(pct).padStart(8)} | ${age} | ${String(totalTokens).padStart(5)} | ${holder.owner}`);
       }
       lines.push('  (Token count = total unique tokens ever traded, excl. universal)');
     }
 
     lines.push('');
     lines.push('═'.repeat(80));
-    lines.push(`  Total: ${totalBalance.toLocaleString('en-US', { maximumFractionDigits: 0 })} tokens across ${holders.length} holders`);
+    const supplyLine = totalSupply > 0
+      ? `  Analyzed: ${totalBalance.toLocaleString('en-US', { maximumFractionDigits: 0 })} tokens across ${holders.length} holders (Total Supply: ${effectiveSupply.toLocaleString('en-US', { maximumFractionDigits: 0 })})`
+      : `  Total: ${totalBalance.toLocaleString('en-US', { maximumFractionDigits: 0 })} tokens across ${holders.length} holders`;
+    lines.push(supplyLine);
     lines.push('═'.repeat(80));
 
     // ═══════════════════════════════════════════════════════════════════
@@ -1567,25 +1599,25 @@ export class HolderAnalyzer {
     // Sybil clusters
     if (hasSybil) {
       lines.push('');
-      lines.push(`  🚨 SYBIL CLUSTERS — ${fundingAnalysis.clusters.length} detected (${sybilPct}% of supply)`);
+      lines.push(`  🚨 SYBIL CLUSTERS — ${fundingAnalysis.clusters.length} detected (${fmtPct(sybilPct)} of supply)`);
       lines.push('  ' + '─'.repeat(70));
 
       for (let i = 0; i < fundingAnalysis.clusters.length; i++) {
         const cluster = fundingAnalysis.clusters[i];
         const clusterBal = holders.filter(h => cluster.wallets.includes(h.owner))
           .reduce((s, h) => s + h.balance, 0);
-        const clusterPct = totalBalance > 0 ? (clusterBal / totalBalance * 100).toFixed(1) : '0';
+        const clusterPct = effectiveSupply > 0 ? (clusterBal / effectiveSupply * 100) : 0;
 
         const funderLabel = cluster.funder ? (getEntityLabel(cluster.funder) || '') : '';
         const typeStr = cluster.type === 'INTER_HOLDER_FUNDING'
           ? '⚠️  HOLDERS FUNDING EACH OTHER'
           : `Funder: ${cluster.funder} ${funderLabel}`;
 
-        lines.push(`\n  Cluster #${i + 1} — ${cluster.walletCount} wallets — ${clusterPct}% supply — ${typeStr}`);
+        lines.push(`\n  Cluster #${i + 1} — ${cluster.walletCount} wallets — ${fmtPct(clusterPct)} supply — ${typeStr}`);
         for (const wallet of cluster.wallets) {
           const hi = holders.find(h => h.owner === wallet);
-          const pct = hi && totalBalance > 0 ? (hi.balance / totalBalance * 100).toFixed(1) : '?';
-          lines.push(`    ${wallet}  (${pct}%)`);
+          const walletPct = hi && effectiveSupply > 0 ? (hi.balance / effectiveSupply * 100) : 0;
+          lines.push(`    ${wallet}  (${fmtPct(walletPct)})`);
         }
       }
     }
@@ -1600,18 +1632,18 @@ export class HolderAnalyzer {
         const group = similarityAnalysis.groups[gi];
         const groupBal = holders.filter(h => group.wallets.includes(h.owner))
           .reduce((s, h) => s + h.balance, 0);
-        const groupPct = totalBalance > 0 ? (groupBal / totalBalance * 100).toFixed(1) : '0';
+        const groupPct = effectiveSupply > 0 ? (groupBal / effectiveSupply * 100) : 0;
 
         let jLabel;
         if (group.avgJaccard >= 0.8) jLabel = '🔴 NEAR IDENTICAL';
         else if (group.avgJaccard >= 0.4) jLabel = '🟠 HIGH OVERLAP';
         else jLabel = '🟡 MODERATE';
 
-        lines.push(`\n  Group #${gi + 1} — ${group.walletCount} wallets — J=${group.avgJaccard} ${jLabel} — ${groupPct}% supply`);
+        lines.push(`\n  Group #${gi + 1} — ${group.walletCount} wallets — J=${group.avgJaccard} ${jLabel} — ${fmtPct(groupPct)} supply`);
         for (const wallet of group.wallets) {
           const hi = holders.find(h => h.owner === wallet);
-          const pct = hi && totalBalance > 0 ? (hi.balance / totalBalance * 100).toFixed(1) : '?';
-          lines.push(`    ${wallet}  (${pct}%)`);
+          const walletPct = hi && effectiveSupply > 0 ? (hi.balance / effectiveSupply * 100) : 0;
+          lines.push(`    ${wallet}  (${fmtPct(walletPct)})`);
         }
         if (group.commonTokens && group.commonTokens.length > 0) {
           const shown = group.commonTokens.slice(0, 3);

@@ -13,6 +13,16 @@
 
 import { RateLimitedRPC } from './rateLimiter.js';
 import { isUniversalToken, getEntityLabel, identifyExchange, isLiquidityProgram } from './knownEntities.js';
+
+/**
+ * Format a percentage for display. Handles very small values nicely.
+ */
+function fmtPct(pct) {
+  if (pct >= 0.01) return pct.toFixed(2) + '%';
+  if (pct >= 0.0001) return pct.toFixed(4) + '%';
+  if (pct > 0) return '<0.0001%';
+  return '0%';
+}
 import { TOKEN_PROGRAM_ID } from './utils.js';
 
 export class InsiderDetector {
@@ -243,7 +253,7 @@ export class InsiderDetector {
    * @param {Map} [snsDomains] — wallet → domain names (from detectSNSDomains)
    * @returns {Array<InsiderGroup>}
    */
-  detectInsiderGroups(holders, similarityAnalysis, fundingAnalysis, interHolderTransfers = [], snsDomains = new Map()) {
+  detectInsiderGroups(holders, similarityAnalysis, fundingAnalysis, interHolderTransfers = [], snsDomains = new Map(), totalSupply = 0) {
     // Build a connection graph: wallet → Set<connected wallets>
     const connections = new Map();
     const evidence = new Map(); // "walletA|walletB" → [{type, detail}]
@@ -353,7 +363,9 @@ export class InsiderDetector {
 
     // Build insider groups with confidence scoring
     const holderMap = new Map(holders.map(h => [h.owner, h]));
-    const totalSupply = holders.reduce((s, h) => s + h.balance, 0);
+    // Use real totalSupply if provided, otherwise fall back to sum of analyzed holders
+    const holderSum = holders.reduce((s, h) => s + h.balance, 0);
+    const effectiveSupply = totalSupply > 0 ? totalSupply : holderSum;
     const insiderGroups = [];
 
     for (const [, members] of groupMap) {
@@ -485,7 +497,7 @@ export class InsiderDetector {
         const h = holderMap.get(w);
         return s + (h ? h.balance : 0);
       }, 0);
-      const supplyPct = totalSupply > 0 ? (groupBalance / totalSupply * 100) : 0;
+      const supplyPct = effectiveSupply > 0 ? (groupBalance / effectiveSupply * 100) : 0;
 
       // Confidence label
       let confidenceLabel;
@@ -521,9 +533,10 @@ export class InsiderDetector {
    * @param {object} fundingAnalysis
    * @returns {string}
    */
-  formatInsiderOutput(insiderGroups, holders, fundingAnalysis) {
+  formatInsiderOutput(insiderGroups, holders, fundingAnalysis, totalSupply = 0) {
     const lines = [];
     const totalBalance = holders.reduce((s, h) => s + h.balance, 0);
+    const effectiveSupply = totalSupply > 0 ? totalSupply : totalBalance;
     const holderMap = new Map(holders.map(h => [h.owner, h]));
 
     lines.push('');
@@ -544,7 +557,7 @@ export class InsiderDetector {
     const highConfidence = insiderGroups.filter(g => g.confidence >= 45).length;
 
     lines.push('');
-    lines.push(`  📊 ${insiderGroups.length} grup terdeteksi — ${totalInsiderWallets} wallets — ${totalInsiderSupply.toFixed(1)}% supply`);
+    lines.push(`  📊 ${insiderGroups.length} grup terdeteksi — ${totalInsiderWallets} wallets — ${fmtPct(totalInsiderSupply)} supply`);
     if (highConfidence > 0) {
       lines.push(`  ⚠️  ${highConfidence} grup dengan kepercayaan tinggi (≥45%)`);
     }
@@ -554,7 +567,7 @@ export class InsiderDetector {
       const group = insiderGroups[gi];
       lines.push('  ┌' + '─'.repeat(76) + '┐');
       lines.push(`  │ GRUP #${gi + 1} — ${group.confidenceLabel}`);
-      lines.push(`  │ Confidence: ${group.confidence}/100 | ${group.walletCount} wallets | ${group.supplyPct}% supply`);
+      lines.push(`  │ Confidence: ${group.confidence}/100 | ${group.walletCount} wallets | ${fmtPct(group.supplyPct)} supply`);
       lines.push('  ├' + '─'.repeat(76) + '┤');
 
       // Signals (evidence)
@@ -568,11 +581,11 @@ export class InsiderDetector {
       lines.push('  │ ANGGOTA:');
       for (const wallet of group.wallets) {
         const h = holderMap.get(wallet);
-        const pct = h && totalBalance > 0 ? (h.balance / totalBalance * 100).toFixed(1) : '?';
+        const pct = h && effectiveSupply > 0 ? (h.balance / effectiveSupply * 100) : 0;
         const age = h?.walletAgeDays != null ? `${h.walletAgeDays}d` : '?';
         const tokens = h?.historicalTokenCount || h?.tokenCount || (h?.tradedTokens?.size ?? '?');
         const score = h?.riskData?.score ?? '?';
-        lines.push(`  │   ${wallet}  ${pct}% | Age:${age} | Tok:${tokens} | Risk:${score}`);
+        lines.push(`  │   ${wallet}  ${fmtPct(pct)} | Age:${age} | Tok:${tokens} | Risk:${score}`);
       }
 
       // Shared tokens

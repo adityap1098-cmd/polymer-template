@@ -297,6 +297,7 @@ async function analyzeTopHolders(tokenAddress) {
     const result = await analyzer.getTokenHolders(tokenAddress, holderLimit);
     const holders = result.holders || result;  // backward compatible
     const filteredEntities = result.filteredEntities || [];
+    const totalSupply = result.totalSupply || 0;
     if (!holders || holders.length === 0) {
       console.log(chalk.red('No holders found for this token.'));
       return;
@@ -348,7 +349,7 @@ async function analyzeTopHolders(tokenAddress) {
       const snsDomains = await insiderDetector.detectSNSDomains(holders);
 
       insiderGroups = insiderDetector.detectInsiderGroups(
-        holders, similarityAnalysis, fundingAnalysis, interHolderTransfers, snsDomains,
+        holders, similarityAnalysis, fundingAnalysis, interHolderTransfers, snsDomains, totalSupply,
       );
       if (insiderGroups.length > 0) {
         const highConf = insiderGroups.filter(g => g.confidence >= 45).length;
@@ -357,13 +358,13 @@ async function analyzeTopHolders(tokenAddress) {
     }
 
     // Format and print full report
-    const output = analyzer.formatHoldersOutput(holders, tokenAddress, similarityAnalysis, fundingAnalysis, filteredEntities);
+    const output = analyzer.formatHoldersOutput(holders, tokenAddress, similarityAnalysis, fundingAnalysis, filteredEntities, totalSupply);
     console.log(output);
 
     // Append insider groups
     let insiderOutput = '';
     if (insiderGroups.length > 0 && mode >= 3) {
-      insiderOutput = insiderDetector.formatInsiderOutput(insiderGroups, holders, fundingAnalysis);
+      insiderOutput = insiderDetector.formatInsiderOutput(insiderGroups, holders, fundingAnalysis, totalSupply);
       console.log(insiderOutput);
     }
 
