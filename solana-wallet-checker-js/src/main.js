@@ -94,8 +94,6 @@ async function checkRpcHealth(rpcUrl) {
     return false;
   }
 }
-  }
-}
 
 // ─── Banner ─────────────────────────────────────────────────────────────────
 
