@@ -955,4 +955,156 @@ describe('PlanConfig', () => {
     if (oldRps !== undefined) process.env.MAX_RPS = oldRps; else delete process.env.MAX_RPS;
     if (oldHops !== undefined) process.env.FUNDING_HOPS = oldHops; else delete process.env.FUNDING_HOPS;
   });
+
+  it('paid plan should have enhanced API flags enabled', () => {
+    assert.equal(PLANS.paid.useBatchAccounts, true);
+    assert.equal(PLANS.paid.useEnhancedTx, true);
+    assert.equal(PLANS.paid.useDAS, true);
+    assert.equal(PLANS.paid.useSNS, true);
+  });
+
+  it('free plan should have enhanced API flags disabled', () => {
+    assert.equal(PLANS.free.useBatchAccounts, false);
+    assert.equal(PLANS.free.useEnhancedTx, false);
+    assert.equal(PLANS.free.useDAS, false);
+    assert.equal(PLANS.free.useSNS, false);
+  });
+});
+
+// ============== Enhanced API Integration Tests ==============
+
+describe('HolderAnalyzer - Enhanced Config', () => {
+  it('should accept enhanced feature flags in config', () => {
+    const analyzer = new HolderAnalyzer(TEST_RPC, {
+      maxRps: 40,
+      useBatchAccounts: true,
+      useEnhancedTx: true,
+      useDAS: true,
+      useSNS: true,
+    });
+    assert.equal(analyzer.config.useBatchAccounts, true);
+    assert.equal(analyzer.config.useEnhancedTx, true);
+    assert.equal(analyzer.config.useDAS, true);
+    assert.equal(analyzer.config.useSNS, true);
+  });
+
+  it('should default enhanced flags to false', () => {
+    const analyzer = new HolderAnalyzer(TEST_RPC, { maxRps: 12 });
+    assert.equal(analyzer.config.useBatchAccounts, false);
+    assert.equal(analyzer.config.useEnhancedTx, false);
+    assert.equal(analyzer.config.useDAS, false);
+    assert.equal(analyzer.config.useSNS, false);
+  });
+
+  it('_extractTokenMintsFromTx should extract mints from token balances', () => {
+    const analyzer = new HolderAnalyzer(TEST_RPC);
+    const mockTx = {
+      meta: {
+        preTokenBalances: [
+          { mint: 'TokenA111111111111111111111111111111111111111', owner: 'Wallet1', uiTokenAmount: { uiAmount: 100 } },
+        ],
+        postTokenBalances: [
+          { mint: 'TokenA111111111111111111111111111111111111111', owner: 'Wallet1', uiTokenAmount: { uiAmount: 200 } },
+          { mint: 'TokenB222222222222222222222222222222222222222', owner: 'Wallet1', uiTokenAmount: { uiAmount: 50 } },
+        ],
+        innerInstructions: [],
+      },
+    };
+    const mints = analyzer._extractTokenMintsFromTx(mockTx, 'Wallet1', null);
+    assert.ok(mints.has('TokenA111111111111111111111111111111111111111'));
+    assert.ok(mints.has('TokenB222222222222222222222222222222222222222'));
+    assert.equal(mints.size, 2);
+  });
+
+  it('_extractTokenMintsFromTx should exclude specified token', () => {
+    const analyzer = new HolderAnalyzer(TEST_RPC);
+    const mockTx = {
+      meta: {
+        preTokenBalances: [],
+        postTokenBalances: [
+          { mint: 'TargetToken11111111111111111111111111111111', owner: 'W1', uiTokenAmount: { uiAmount: 10 } },
+          { mint: 'OtherToken111111111111111111111111111111111', owner: 'W1', uiTokenAmount: { uiAmount: 5 } },
+        ],
+        innerInstructions: [],
+      },
+    };
+    const mints = analyzer._extractTokenMintsFromTx(mockTx, 'W1', 'TargetToken11111111111111111111111111111111');
+    assert.ok(!mints.has('TargetToken11111111111111111111111111111111'));
+    assert.ok(mints.has('OtherToken111111111111111111111111111111111'));
+  });
+});
+
+describe('FundingAnalyzer - Enhanced Config', () => {
+  it('should accept useEnhancedTx in config', () => {
+    const analyzer = new FundingAnalyzer(TEST_RPC, { maxRps: 40, useEnhancedTx: true });
+    assert.equal(analyzer.config.useEnhancedTx, true);
+  });
+
+  it('should default useEnhancedTx to false', () => {
+    const analyzer = new FundingAnalyzer(TEST_RPC, {});
+    assert.equal(analyzer.config.useEnhancedTx, false);
+  });
+
+  it('_extractFunderFromTx should find SOL sender', () => {
+    const analyzer = new FundingAnalyzer(TEST_RPC, {});
+    const mockTx = {
+      meta: {
+        preBalances: [1000000000, 5000000000],  // funder had 5 SOL
+        postBalances: [2000000000, 4000000000],  // funder sent 1 SOL to wallet
+      },
+      transaction: {
+        message: {
+          accountKeys: ['ReceiverWallet11111111111111111111111111111', 'FunderWallet1111111111111111111111111111111'],
+        },
+      },
+      blockTime: 1700000000,
+    };
+
+    const result = analyzer._extractFunderFromTx(mockTx, 'ReceiverWallet11111111111111111111111111111');
+    assert.ok(result, 'Should find funder');
+    assert.equal(result.funder, 'FunderWallet1111111111111111111111111111111');
+    assert.ok(result.amountSOL > 0);
+    assert.ok(result.timestamp instanceof Date);
+  });
+});
+
+describe('InsiderDetector - Enhanced Config', () => {
+  it('should accept useEnhancedTx and useSNS in config', () => {
+    const detector = new InsiderDetector(TEST_RPC, 40, { useEnhancedTx: true, useSNS: true });
+    assert.equal(detector.useEnhancedTx, true);
+    assert.equal(detector.useSNS, true);
+  });
+
+  it('should default enhanced flags to false', () => {
+    const detector = new InsiderDetector(TEST_RPC, 12, {});
+    assert.equal(detector.useEnhancedTx, false);
+    assert.equal(detector.useSNS, false);
+  });
+
+  it('SNS domains should reduce confidence for groups', () => {
+    const detector = new InsiderDetector(TEST_RPC, 12, {});
+    const holders = [
+      { owner: 'WalletA', balance: 500, tradedTokens: new Set(['T1', 'T2', 'T3']), historicalTokenCount: 3, walletAgeDays: 100, tokenCount: 3 },
+      { owner: 'WalletB', balance: 500, tradedTokens: new Set(['T1', 'T2', 'T3']), historicalTokenCount: 3, walletAgeDays: 100, tokenCount: 3 },
+    ];
+    const similarity = {
+      groups: [{ wallets: ['WalletA', 'WalletB'], avgJaccard: 0.5, commonTokens: ['T1', 'T2'], commonTokenCount: 2 }],
+      timingClusters: [],
+    };
+    const funding = { clusters: [] };
+
+    // Without SNS: higher confidence
+    const groupsNoSNS = detector.detectInsiderGroups(holders, similarity, funding, [], new Map());
+    assert.ok(groupsNoSNS.length >= 1);
+    const confNoSNS = groupsNoSNS[0].confidence;
+
+    // With SNS: both wallets have .sol domains → lower confidence
+    const snsDomains = new Map([
+      ['WalletA', ['alice.sol']],
+      ['WalletB', ['bob.sol']],
+    ]);
+    const groupsWithSNS = detector.detectInsiderGroups(holders, similarity, funding, [], snsDomains);
+    assert.ok(groupsWithSNS.length >= 1);
+    assert.ok(groupsWithSNS[0].confidence < confNoSNS, `SNS should reduce confidence: ${groupsWithSNS[0].confidence} < ${confNoSNS}`);
+  });
 });

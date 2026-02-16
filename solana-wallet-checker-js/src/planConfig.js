@@ -5,6 +5,12 @@
  *   free  → 15 req/s, conservative scanning
  *   paid  → 50 req/s, deep scanning (Build plan $42/mo, 80M credits)
  *
+ * Paid plan unlocks enhanced QuickNode APIs:
+ *   - getMultipleAccounts (batch account lookups)
+ *   - getTransactionsForAddress (single-call tx fetch, eliminates N+1)
+ *   - getAssetsByOwner (DAS — richer token/NFT data)
+ *   - sns_getAllDomainsForOwner (.sol domain detection)
+ *
  * All parameters are tuned for each plan to maximize accuracy
  * while staying within API limits.
  */
@@ -20,6 +26,13 @@ const PLANS = {
     interHolderTxScan: 10,   // last 10 tx per wallet for SOL transfers
     tokenHistoryEarlyStop: 50,  // stop after finding 50 unique tokens
     purchaseTimeScanLimit: 1000, // sigs to scan for first purchase
+
+    // Enhanced API features (disabled on free)
+    useBatchAccounts: false, // getMultipleAccounts (batch account info)
+    useEnhancedTx: false,    // getTransactionsForAddress (single-call tx fetch)
+    useDAS: false,           // DAS getAssetsByOwner (richer token data)
+    useSNS: false,           // SNS .sol domain detection
+
     description: 'QuickNode Free — 15 req/s, 50K credits/day',
   },
   paid: {
@@ -32,6 +45,13 @@ const PLANS = {
     interHolderTxScan: 30,   // last 30 tx per wallet for SOL transfers
     tokenHistoryEarlyStop: 150, // stop after 150 unique tokens
     purchaseTimeScanLimit: 3000, // deeper purchase time scan
+
+    // Enhanced API features (enabled on paid)
+    useBatchAccounts: true,  // getMultipleAccounts — saves ~19 calls per analysis
+    useEnhancedTx: true,     // getTransactionsForAddress — eliminates N+1 pattern (~50× fewer calls)
+    useDAS: true,            // DAS getAssetsByOwner — complete token/NFT profile
+    useSNS: true,            // SNS .sol domain detection — identity signal for risk scoring
+
     description: 'QuickNode Build — 50 req/s, 80M credits/mo',
   },
 };

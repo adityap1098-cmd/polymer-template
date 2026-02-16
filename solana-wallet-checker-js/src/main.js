@@ -73,9 +73,16 @@ function validateSolanaAddress(address) {
 
 function printBanner() {
   const plan = getPlanConfig();
+  const enhancedApis = [];
+  if (plan.useBatchAccounts) enhancedApis.push('BatchAccounts');
+  if (plan.useEnhancedTx) enhancedApis.push('EnhancedTx');
+  if (plan.useDAS) enhancedApis.push('DAS');
+  if (plan.useSNS) enhancedApis.push('SNS');
+  const apiStr = enhancedApis.length > 0 ? enhancedApis.join(' · ') : 'Standard only';
+
   console.log(chalk.cyan(`
 ╔${'═'.repeat(62)}╗
-║          🔍 SOLANA WALLET CHECKER BOT v3.0 🔍                 ║
+║          🔍 SOLANA WALLET CHECKER BOT v3.1 🔍                 ║
 ║            Node.js + @solana/web3.js edition                   ║
 ║                                                                ║
 ║  Enhanced Analysis:                                            ║
@@ -83,10 +90,12 @@ function printBanner() {
 ║  • Funding Chain / Sybil Detection (${String(plan.fundingHops)}-hop)                   ║
 ║  • 🕵️  Insider/Team Detection (multi-signal)                   ║
 ║  • Inter-holder Transfer · Buy-Timing Correlation              ║
+║  • 🏷️  SNS Domain Detection · DAS Token Discovery              ║
 ╚${'═'.repeat(62)}╝
 `));
   console.log(chalk.gray(`  Plan: ${plan.description}`));
   console.log(chalk.gray(`  Rate: ${plan.maxRps} req/s | TX scan: ${plan.txHistoryPerWallet}/wallet | Funding: ${plan.fundingHops}-hop`));
+  console.log(chalk.gray(`  APIs: ${apiStr}`));
   console.log('');
 }
 
@@ -275,8 +284,12 @@ async function analyzeTopHolders(tokenAddress) {
       const insiderDetector = new InsiderDetector(rpcUrl, plan.maxRps, plan);
       console.log(chalk.cyan('\n🕵️  Running insider/team detection...'));
       const interHolderTransfers = await insiderDetector.detectInterHolderTransfers(holders);
+
+      // Step 4b: SNS Domain Detection (paid plan — identity signal)
+      const snsDomains = await insiderDetector.detectSNSDomains(holders);
+
       insiderGroups = insiderDetector.detectInsiderGroups(
-        holders, similarityAnalysis, fundingAnalysis, interHolderTransfers,
+        holders, similarityAnalysis, fundingAnalysis, interHolderTransfers, snsDomains,
       );
       if (insiderGroups.length > 0) {
         const highConf = insiderGroups.filter(g => g.confidence >= 45).length;

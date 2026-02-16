@@ -21,6 +21,7 @@ export class FundingAnalyzer {
     this.config = {
       maxRps: config.maxRps || 12,
       fundingHops: config.fundingHops || 2,
+      useEnhancedTx: config.useEnhancedTx || false,
     };
     this.rpc = new RateLimitedRPC(rpcUrl, this.config.maxRps);
   }
@@ -116,6 +117,28 @@ export class FundingAnalyzer {
    */
   async _findInitialFunder(wallet) {
     try {
+      // ── Enhanced: getTransactionsForAddress returns full txs in 1 call ──
+      if (this.config.useEnhancedTx) {
+        try {
+          const txs = await this.rpc.call('getTransactionsForAddress', [
+            wallet, { limit: 20, encoding: 'jsonParsed' },
+          ]);
+
+          if (Array.isArray(txs) && txs.length > 0) {
+            // Sort by slot ascending → oldest first
+            const sorted = [...txs].sort((a, b) => (a.slot || 0) - (b.slot || 0));
+
+            for (const tx of sorted.slice(0, 3)) {
+              if (!tx?.meta) continue;
+              const result = this._extractFunderFromTx(tx, wallet);
+              if (result) return result;
+            }
+            return null;
+          }
+        } catch { /* fall through to legacy */ }
+      }
+
+      // ── Legacy: getSignaturesForAddress + getTransaction ──
       const signatures = await this.rpc.call('getSignaturesForAddress', [
         wallet, { limit: 20 },
       ]);
@@ -136,39 +159,8 @@ export class FundingAnalyzer {
           ]);
 
           if (!tx || !tx.meta) continue;
-
-          const meta = tx.meta;
-          const preBalances = meta.preBalances || [];
-          const postBalances = meta.postBalances || [];
-          const accountKeys = tx.transaction?.message?.accountKeys || [];
-
-          // Find which account sent SOL to our wallet
-          const walletIndex = accountKeys.findIndex(k => {
-            const addr = typeof k === 'object' ? k.pubkey?.toString() : k?.toString();
-            return addr === wallet;
-          });
-
-          if (walletIndex >= 0) {
-            const received = (postBalances[walletIndex] || 0) - (preBalances[walletIndex] || 0);
-            if (received > 0) {
-              // Find the sender (account whose balance decreased)
-              for (let j = 0; j < preBalances.length; j++) {
-                if (j === walletIndex) continue;
-                const sent = (preBalances[j] || 0) - (postBalances[j] || 0);
-                if (sent > 0 && j < accountKeys.length) {
-                  const key = accountKeys[j];
-                  const funderAddr = typeof key === 'object' ? key.pubkey?.toString() : key?.toString();
-                  if (funderAddr && funderAddr.length >= 32 && funderAddr !== '11111111111111111111111111111111') {
-                    return {
-                      funder: funderAddr,
-                      timestamp: sigInfo.blockTime ? new Date(sigInfo.blockTime * 1000) : null,
-                      amountSOL: received / 1e9,
-                    };
-                  }
-                }
-              }
-            }
-          }
+          const result = this._extractFunderFromTx(tx, wallet, sigInfo.blockTime);
+          if (result) return result;
         } catch {
           continue;
         }
@@ -178,6 +170,48 @@ export class FundingAnalyzer {
     } catch {
       return null;
     }
+  }
+
+  /**
+   * Extract the SOL funder from a transaction.
+   * @private
+   */
+  _extractFunderFromTx(tx, wallet, blockTimeOverride = null) {
+    const meta = tx.meta;
+    if (!meta) return null;
+
+    const preBalances = meta.preBalances || [];
+    const postBalances = meta.postBalances || [];
+    const accountKeys = tx.transaction?.message?.accountKeys || [];
+    const blockTime = blockTimeOverride || tx.blockTime;
+
+    const walletIndex = accountKeys.findIndex(k => {
+      const addr = typeof k === 'object' ? k.pubkey?.toString() : k?.toString();
+      return addr === wallet;
+    });
+
+    if (walletIndex >= 0) {
+      const received = (postBalances[walletIndex] || 0) - (preBalances[walletIndex] || 0);
+      if (received > 0) {
+        for (let j = 0; j < preBalances.length; j++) {
+          if (j === walletIndex) continue;
+          const sent = (preBalances[j] || 0) - (postBalances[j] || 0);
+          if (sent > 0 && j < accountKeys.length) {
+            const key = accountKeys[j];
+            const funderAddr = typeof key === 'object' ? key.pubkey?.toString() : key?.toString();
+            if (funderAddr && funderAddr.length >= 32 && funderAddr !== '11111111111111111111111111111111') {
+              return {
+                funder: funderAddr,
+                timestamp: blockTime ? new Date(blockTime * 1000) : null,
+                amountSOL: received / 1e9,
+              };
+            }
+          }
+        }
+      }
+    }
+
+    return null;
   }
 
   /**

@@ -73,6 +73,10 @@ export class HolderAnalyzer {
       walletAgePages: config.walletAgePages || 3,
       tokenHistoryEarlyStop: config.tokenHistoryEarlyStop || 50,
       purchaseTimeScanLimit: config.purchaseTimeScanLimit || 1000,
+      useBatchAccounts: config.useBatchAccounts || false,
+      useEnhancedTx: config.useEnhancedTx || false,
+      useDAS: config.useDAS || false,
+      useSNS: config.useSNS || false,
     };
     this.rpc = new RateLimitedRPC(rpcUrl, this.config.maxRps);
   }
@@ -102,50 +106,98 @@ export class HolderAnalyzer {
     const filteredEntities = [];  // exchanges, DEX, liquidity programs
     console.log('Processing account details...');
 
-    for (let i = 0; i < accounts.length; i++) {
-      try {
-        const accountInfo = accounts[i];
-        const address = accountInfo.address;
-        const amount = parseFloat(accountInfo.amount || '0');
-        if (!address || amount <= 0) continue;
+    // ── Enhanced: Use getMultipleAccounts for batch lookup (paid plan) ──
+    if (this.config.useBatchAccounts) {
+      console.log('  ⚡ Using getMultipleAccounts (batch mode)');
+      const addresses = accounts.map(a => a.address).filter(Boolean);
+      const amounts = new Map(accounts.map(a => [a.address, parseFloat(a.amount || '0')]));
 
-        const accountData = await this.rpc.call('getAccountInfo', [
-          address, { encoding: 'jsonParsed' },
+      try {
+        const batchResult = await this.rpc.call('getMultipleAccounts', [
+          addresses, { encoding: 'jsonParsed' },
         ]);
 
-        if (!accountData || !accountData.value) continue;
-        const parsed = accountData.value?.data?.parsed || {};
-        const info = parsed.info || {};
-        const owner = info.owner;
+        if (batchResult?.value) {
+          for (let i = 0; i < batchResult.value.length; i++) {
+            const acctData = batchResult.value[i];
+            const address = addresses[i];
+            const amount = amounts.get(address) || 0;
+            if (!acctData || amount <= 0) continue;
 
-        if (!owner) continue;
-        if (owner.length < 32) continue;
+            const parsed = acctData.data?.parsed || {};
+            const info = parsed.info || {};
+            const owner = info.owner;
+            if (!owner || owner.length < 32) continue;
 
-        // Filter: known liquidity programs / DEX
-        if (isLiquidityProgram(owner)) {
-          filteredEntities.push({ owner, type: 'LIQUIDITY', label: '🔄 Liquidity/DEX', balance: 0 });
-          continue;
+            if (isLiquidityProgram(owner)) {
+              filteredEntities.push({ owner, type: 'LIQUIDITY', label: '🔄 Liquidity/DEX', balance: 0 });
+              continue;
+            }
+
+            const exchange = identifyExchange(owner);
+            if (exchange.isExchange) {
+              const decimals = info.tokenAmount?.decimals || 0;
+              const uiAmount = decimals > 0 ? amount / Math.pow(10, decimals) : amount;
+              filteredEntities.push({ owner, type: 'EXCHANGE', label: `🏦 ${exchange.name}`, balance: uiAmount });
+              continue;
+            }
+
+            const decimals = info.tokenAmount?.decimals || 0;
+            const uiAmount = decimals > 0 ? amount / Math.pow(10, decimals) : amount;
+            holders.push({ owner, balance: uiAmount, tokenAccount: address });
+          }
         }
+      } catch (err) {
+        console.log(`  ⚠️ getMultipleAccounts failed (${err.message}), falling back to sequential`);
+        // Fall through to sequential below
+      }
+    }
 
-        // Filter: known exchange wallets
-        const exchange = identifyExchange(owner);
-        if (exchange.isExchange) {
+    // ── Fallback: Sequential getAccountInfo (free plan or batch failure) ──
+    if (holders.length === 0 && filteredEntities.length === 0) {
+      for (let i = 0; i < accounts.length; i++) {
+        try {
+          const accountInfo = accounts[i];
+          const address = accountInfo.address;
+          const amount = parseFloat(accountInfo.amount || '0');
+          if (!address || amount <= 0) continue;
+
+          const accountData = await this.rpc.call('getAccountInfo', [
+            address, { encoding: 'jsonParsed' },
+          ]);
+
+          if (!accountData || !accountData.value) continue;
+          const parsed = accountData.value?.data?.parsed || {};
+          const info = parsed.info || {};
+          const owner = info.owner;
+
+          if (!owner) continue;
+          if (owner.length < 32) continue;
+
+          if (isLiquidityProgram(owner)) {
+            filteredEntities.push({ owner, type: 'LIQUIDITY', label: '🔄 Liquidity/DEX', balance: 0 });
+            continue;
+          }
+
+          const exchange = identifyExchange(owner);
+          if (exchange.isExchange) {
+            const decimals = info.tokenAmount?.decimals || 0;
+            const uiAmount = decimals > 0 ? amount / Math.pow(10, decimals) : amount;
+            filteredEntities.push({ owner, type: 'EXCHANGE', label: `🏦 ${exchange.name}`, balance: uiAmount });
+            continue;
+          }
+
           const decimals = info.tokenAmount?.decimals || 0;
           const uiAmount = decimals > 0 ? amount / Math.pow(10, decimals) : amount;
-          filteredEntities.push({ owner, type: 'EXCHANGE', label: `🏦 ${exchange.name}`, balance: uiAmount });
+
+          holders.push({ owner, balance: uiAmount, tokenAccount: address });
+
+          if ((i + 1) % 5 === 0) {
+            console.log(`  Processed ${i + 1}/${actualCount} accounts...`);
+          }
+        } catch {
           continue;
         }
-
-        const decimals = info.tokenAmount?.decimals || 0;
-        const uiAmount = decimals > 0 ? amount / Math.pow(10, decimals) : amount;
-
-        holders.push({ owner, balance: uiAmount, tokenAccount: address });
-
-        if ((i + 1) % 5 === 0) {
-          console.log(`  Processed ${i + 1}/${actualCount} accounts...`);
-        }
-      } catch {
-        continue;
       }
     }
 
@@ -276,6 +328,40 @@ export class HolderAnalyzer {
     const allTokens = new Set();   // all mints found (for Jaccard)
     const heldTokens = new Set();  // mints with balance > 0 (for token count)
 
+    // ── Enhanced: Try DAS getAssetsByOwner first (paid plan) ──
+    if (this.config.useDAS) {
+      try {
+        const dasResult = await this.rpc.call('getAssetsByOwner', [{
+          ownerAddress: wallet,
+          page: 1,
+          limit: 1000,
+          displayOptions: { showFungible: true, showNativeBalance: false },
+        }]);
+
+        if (dasResult?.items && dasResult.items.length > 0) {
+          for (const item of dasResult.items) {
+            // DAS returns token_info for fungible tokens
+            const mint = item.id;
+            if (!mint || mint === excludeToken) continue;
+            if (isUniversalToken(mint)) continue;
+
+            // Filter by interface: FungibleToken, FungibleAsset
+            const iface = item.interface;
+            if (iface !== 'FungibleToken' && iface !== 'FungibleAsset') continue;
+
+            allTokens.add(mint);
+            const balance = item.token_info?.balance || 0;
+            if (balance > 0) heldTokens.add(mint);
+          }
+
+          if (allTokens.size > 0) {
+            return { allTokens, heldTokens, tokenCount: heldTokens.size };
+          }
+        }
+      } catch { /* DAS failed, fall through to standard method */ }
+    }
+
+    // ── Standard: getTokenAccountsByOwner ──
     for (const programId of [TOKEN_PROGRAM_ID, TOKEN_2022_PROGRAM_ID]) {
       try {
         const result = await this.rpc.call('getTokenAccountsByOwner', [
@@ -305,10 +391,46 @@ export class HolderAnalyzer {
   // ─── Token Trading History (Deep Scan) ──────────────────────────────────
 
   /**
+   * Extract token mints from a transaction object.
+   * Shared helper for both legacy (getTransaction) and enhanced (getTransactionsForAddress).
+   * @private
+   */
+  _extractTokenMintsFromTx(tx, wallet, excludeToken) {
+    const mints = new Set();
+    if (!tx?.meta) return mints;
+
+    // Extract from preTokenBalances + postTokenBalances (most reliable)
+    for (const balances of [tx.meta.preTokenBalances, tx.meta.postTokenBalances]) {
+      if (!balances) continue;
+      for (const b of balances) {
+        if (b.mint && b.owner === wallet && b.mint !== excludeToken && !isUniversalToken(b.mint)) {
+          mints.add(b.mint);
+        }
+      }
+    }
+
+    // Also check inner instructions for additional mints
+    for (const innerGroup of (tx.meta.innerInstructions || [])) {
+      for (const inst of (innerGroup.instructions || [])) {
+        const programId = inst.programId?.toString?.() || inst.programId;
+        if (programId === TOKEN_PROGRAM_ID || programId === TOKEN_2022_PROGRAM_ID) {
+          const mint = inst.parsed?.info?.mint;
+          if (mint && mint !== excludeToken && !isUniversalToken(mint)) mints.add(mint);
+        }
+      }
+    }
+
+    return mints;
+  }
+
+  /**
    * Get ALL tokens a wallet has interacted with from transaction history.
    * CRITICAL: getTokenAccountsByOwner misses closed accounts (sold tokens).
    * This scans recent N transactions to find every token mint the wallet touched.
    * Combined with getTokenAccountsByOwner, gives a COMPLETE token profile.
+   *
+   * Enhanced path: getTransactionsForAddress returns full txs in ONE call (paid plan).
+   * Legacy path: getSignaturesForAddress + N × getTransaction (N+1 calls).
    *
    * @param {string} wallet
    * @param {string} excludeToken — the token being analyzed
@@ -320,6 +442,25 @@ export class HolderAnalyzer {
     const scanLimit = limit || this.config.txHistoryPerWallet;
     const earlyStop = this.config.tokenHistoryEarlyStop;
 
+    // ── Enhanced: getTransactionsForAddress (single call, paid plan) ──
+    if (this.config.useEnhancedTx) {
+      try {
+        const txs = await this.rpc.call('getTransactionsForAddress', [
+          wallet, { limit: scanLimit, encoding: 'jsonParsed' },
+        ]);
+
+        if (Array.isArray(txs) && txs.length > 0) {
+          for (const tx of txs) {
+            const mints = this._extractTokenMintsFromTx(tx, wallet, excludeToken);
+            for (const m of mints) tokens.add(m);
+            if (tokens.size >= earlyStop) break;
+          }
+          return tokens; // Success — skip legacy path
+        }
+      } catch { /* Enhanced method unavailable, fall through to legacy */ }
+    }
+
+    // ── Legacy: getSignaturesForAddress + getTransaction (N+1 calls) ──
     try {
       const signatures = await this.rpc.call('getSignaturesForAddress', [wallet, { limit: scanLimit }]);
       if (!signatures || !Array.isArray(signatures)) return tokens;
@@ -332,28 +473,9 @@ export class HolderAnalyzer {
             sigInfo.signature,
             { encoding: 'jsonParsed', maxSupportedTransactionVersion: 0 },
           ]);
-          if (!tx?.meta) continue;
 
-          // Extract from preTokenBalances + postTokenBalances (most reliable)
-          for (const balances of [tx.meta.preTokenBalances, tx.meta.postTokenBalances]) {
-            if (!balances) continue;
-            for (const b of balances) {
-              if (b.mint && b.owner === wallet && b.mint !== excludeToken && !isUniversalToken(b.mint)) {
-                tokens.add(b.mint);
-              }
-            }
-          }
-
-          // Also check inner instructions for additional mints
-          for (const innerGroup of (tx.meta.innerInstructions || [])) {
-            for (const inst of (innerGroup.instructions || [])) {
-              const programId = inst.programId?.toString?.() || inst.programId;
-              if (programId === TOKEN_PROGRAM_ID || programId === TOKEN_2022_PROGRAM_ID) {
-                const mint = inst.parsed?.info?.mint;
-                if (mint && mint !== excludeToken && !isUniversalToken(mint)) tokens.add(mint);
-              }
-            }
-          }
+          const mints = this._extractTokenMintsFromTx(tx, wallet, excludeToken);
+          for (const m of mints) tokens.add(m);
         } catch { continue; }
 
         // Early stop: found enough tokens for meaningful Jaccard comparison
@@ -842,6 +964,34 @@ export class HolderAnalyzer {
   async _getFirstPurchaseTime(wallet, tokenMint) {
     try {
       const scanLimit = this.config.purchaseTimeScanLimit;
+
+      // ── Enhanced: try getTransactionsForAddress for fast purchase detection ──
+      if (this.config.useEnhancedTx) {
+        try {
+          // Fetch a moderate batch to find earliest purchase
+          const txs = await this.rpc.call('getTransactionsForAddress', [
+            wallet, { limit: Math.min(scanLimit, 200), encoding: 'jsonParsed' },
+          ]);
+
+          if (Array.isArray(txs) && txs.length > 0) {
+            // Sort oldest first (by slot or blockTime)
+            const sorted = [...txs].sort((a, b) => (a.slot || 0) - (b.slot || 0));
+
+            for (const tx of sorted.slice(0, 20)) {
+              if (!tx?.meta) continue;
+              for (const balance of (tx.meta.postTokenBalances || [])) {
+                if (balance.mint === tokenMint && balance.owner === wallet) {
+                  const bt = tx.blockTime;
+                  return { purchaseTime: bt ? new Date(bt * 1000) : new Date() };
+                }
+              }
+            }
+            return null; // Searched but not found — skip legacy
+          }
+        } catch { /* fall through to legacy */ }
+      }
+
+      // ── Legacy: getSignaturesForAddress + getTransaction ──
       const signatures = await this.rpc.call('getSignaturesForAddress', [wallet, { limit: scanLimit }]);
       if (!signatures || !Array.isArray(signatures) || signatures.length === 0) return null;
 

@@ -20,58 +20,87 @@ export class InsiderDetector {
   constructor(rpcUrl, maxRps = 12, config = {}) {
     this.rpc = new RateLimitedRPC(rpcUrl, maxRps);
     this.interHolderTxScan = config.interHolderTxScan || 10;
+    this.useEnhancedTx = config.useEnhancedTx || false;
+    this.useSNS = config.useSNS || false;
   }
 
   /**
    * Detect inter-holder SOL transfers (holders sending SOL to each other).
    * This is a STRONG insider signal — team members distribute funds.
    * 
+   * Enhanced: getTransactionsForAddress returns full txs in 1 call (paid plan).
+   * Legacy: getSignaturesForAddress + N × getTransaction (N+1 calls per wallet).
+   * 
    * @param {Array} holders — must have .owner
    * @returns {Promise<Array<{from, to, amountSOL, timestamp}>>}
    */
   async detectInterHolderTransfers(holders) {
     console.log(`\n🔗 Checking inter-holder SOL transfers (${holders.length} wallets, last ${this.interHolderTxScan} tx each)...`);
+    if (this.useEnhancedTx) console.log('  ⚡ Using getTransactionsForAddress (fast mode)');
     const holderSet = new Set(holders.map(h => h.owner));
     const transfers = [];
 
     for (let i = 0; i < holders.length; i++) {
       try {
-        const sigs = await this.rpc.call('getSignaturesForAddress', [
-          holders[i].owner, { limit: 100 },
-        ]);
-        if (!sigs || sigs.length === 0) continue;
+        let txsToProcess = [];
 
-        // Check last N txs for SOL transfers to/from other holders
-        for (const sigInfo of sigs.slice(0, this.interHolderTxScan)) {
-          if (!sigInfo.signature) continue;
+        // ── Enhanced: getTransactionsForAddress (1 call per wallet) ──
+        if (this.useEnhancedTx) {
           try {
-            const tx = await this.rpc.call('getTransaction', [
-              sigInfo.signature,
-              { encoding: 'jsonParsed', maxSupportedTransactionVersion: 0 },
+            const txs = await this.rpc.call('getTransactionsForAddress', [
+              holders[i].owner, { limit: this.interHolderTxScan, encoding: 'jsonParsed' },
             ]);
-            if (!tx?.meta) continue;
-
-            const keys = tx.transaction?.message?.accountKeys || [];
-            const pre = tx.meta.preBalances || [];
-            const post = tx.meta.postBalances || [];
-
-            for (let k = 0; k < keys.length; k++) {
-              const addr = typeof keys[k] === 'object' ? keys[k].pubkey?.toString() : keys[k]?.toString();
-              if (!addr || addr === holders[i].owner) continue;
-              if (!holderSet.has(addr)) continue;
-
-              const diff = (post[k] || 0) - (pre[k] || 0);
-              if (Math.abs(diff) > 1000) { // >0.000001 SOL
-                transfers.push({
-                  from: diff > 0 ? holders[i].owner : addr,
-                  to: diff > 0 ? addr : holders[i].owner,
-                  amountSOL: Math.abs(diff) / 1e9,
-                  timestamp: sigInfo.blockTime ? new Date(sigInfo.blockTime * 1000) : null,
-                  signature: sigInfo.signature,
-                });
-              }
+            if (Array.isArray(txs) && txs.length > 0) {
+              txsToProcess = txs;
             }
-          } catch { continue; }
+          } catch { /* fall through to legacy */ }
+        }
+
+        // ── Legacy: getSignaturesForAddress + getTransaction ──
+        if (txsToProcess.length === 0) {
+          const sigs = await this.rpc.call('getSignaturesForAddress', [
+            holders[i].owner, { limit: 100 },
+          ]);
+          if (!sigs || sigs.length === 0) continue;
+
+          for (const sigInfo of sigs.slice(0, this.interHolderTxScan)) {
+            if (!sigInfo.signature) continue;
+            try {
+              const tx = await this.rpc.call('getTransaction', [
+                sigInfo.signature,
+                { encoding: 'jsonParsed', maxSupportedTransactionVersion: 0 },
+              ]);
+              if (tx) txsToProcess.push({ ...tx, _blockTime: sigInfo.blockTime, _signature: sigInfo.signature });
+            } catch { continue; }
+          }
+        }
+
+        // ── Process collected transactions ──
+        for (const tx of txsToProcess) {
+          if (!tx?.meta) continue;
+
+          const keys = tx.transaction?.message?.accountKeys || [];
+          const pre = tx.meta.preBalances || [];
+          const post = tx.meta.postBalances || [];
+          const blockTime = tx.blockTime || tx._blockTime;
+          const signature = tx.transaction?.signatures?.[0] || tx._signature || '';
+
+          for (let k = 0; k < keys.length; k++) {
+            const addr = typeof keys[k] === 'object' ? keys[k].pubkey?.toString() : keys[k]?.toString();
+            if (!addr || addr === holders[i].owner) continue;
+            if (!holderSet.has(addr)) continue;
+
+            const diff = (post[k] || 0) - (pre[k] || 0);
+            if (Math.abs(diff) > 1000) { // >0.000001 SOL
+              transfers.push({
+                from: diff > 0 ? holders[i].owner : addr,
+                to: diff > 0 ? addr : holders[i].owner,
+                amountSOL: Math.abs(diff) / 1e9,
+                timestamp: blockTime ? new Date(blockTime * 1000) : null,
+                signature,
+              });
+            }
+          }
         }
       } catch { continue; }
 
@@ -95,6 +124,39 @@ export class InsiderDetector {
     return unique;
   }
 
+  // ─── SNS Domain Detection ────────────────────────────────────────────────
+
+  /**
+   * Check if holders have .sol domains (Solana Name Service).
+   * Wallets with .sol domains are more likely real users, less likely sybil.
+   * 
+   * @param {Array} holders — must have .owner
+   * @returns {Promise<Map<string, string[]>>} wallet → domain names
+   */
+  async detectSNSDomains(holders) {
+    if (!this.useSNS) return new Map();
+
+    console.log(`\n🏷️  Checking SNS .sol domains for ${holders.length} wallets...`);
+    const domainMap = new Map();
+
+    for (const holder of holders) {
+      try {
+        const result = await this.rpc.call('sns_getAllDomainsForOwner', [holder.owner]);
+        if (Array.isArray(result) && result.length > 0) {
+          domainMap.set(holder.owner, result);
+        }
+      } catch { continue; }
+    }
+
+    if (domainMap.size > 0) {
+      console.log(`   Found ${domainMap.size} wallet(s) with .sol domain(s)`);
+    } else {
+      console.log(`   No .sol domains found`);
+    }
+
+    return domainMap;
+  }
+
   /**
    * Combine ALL signals into unified Insider Groups.
    * 
@@ -109,9 +171,10 @@ export class InsiderDetector {
    * @param {object} similarityAnalysis — from holderAnalyzer.analyzeHolderSimilarities
    * @param {object} fundingAnalysis — from fundingAnalyzer.analyzeFundingChains
    * @param {Array} interHolderTransfers — from detectInterHolderTransfers
+   * @param {Map} [snsDomains] — wallet → domain names (from detectSNSDomains)
    * @returns {Array<InsiderGroup>}
    */
-  detectInsiderGroups(holders, similarityAnalysis, fundingAnalysis, interHolderTransfers = []) {
+  detectInsiderGroups(holders, similarityAnalysis, fundingAnalysis, interHolderTransfers = [], snsDomains = new Map()) {
     // Build a connection graph: wallet → Set<connected wallets>
     const connections = new Map();
     const evidence = new Map(); // "walletA|walletB" → [{type, detail}]
@@ -314,7 +377,23 @@ export class InsiderDetector {
       if (members.size >= 5) { confidence += 5; signals.push(`👥 Grup besar: ${members.size} wallet — 5pts`); }
       else if (members.size >= 3) { confidence += 3; signals.push(`👥 ${members.size} wallets dalam grup — 3pts`); }
 
-      confidence = Math.min(100, confidence);
+      // SNS domain penalty — wallets with .sol domains are more likely real users
+      // If majority in group have .sol domains, reduce confidence (-5 to -15pts)
+      if (snsDomains.size > 0) {
+        const domainsInGroup = walletList.filter(w => snsDomains.has(w));
+        const domainRatio = domainsInGroup.length / walletList.length;
+        if (domainRatio >= 0.5) {
+          const penalty = domainRatio >= 0.8 ? -15 : -10;
+          confidence += penalty;
+          const domainNames = domainsInGroup.map(w => (snsDomains.get(w) || []).join(', ')).filter(Boolean).join('; ');
+          signals.push(`🏷️  ${domainsInGroup.length}/${walletList.length} punya .sol domain (${domainNames}) — ${penalty}pts`);
+        } else if (domainsInGroup.length > 0) {
+          confidence -= 5;
+          signals.push(`🏷️  ${domainsInGroup.length} wallet punya .sol domain — -5pts`);
+        }
+      }
+
+      confidence = Math.max(0, Math.min(100, confidence));
 
       // Supply controlled
       const groupBalance = walletList.reduce((s, w) => {
