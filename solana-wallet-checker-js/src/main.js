@@ -280,7 +280,7 @@ async function analyzeTopHolders(tokenAddress) {
     console.log(`  Recommended: 50-100 (balanced speed & coverage), Max: ${maxHolders}`);
   } else {
     console.log(`  Recommended: 15-20 (balanced speed and coverage)`);
-    console.log('  ⚠️  Note: Free plan limited to ~20 largest accounts (Solana API limit)');
+    console.log('  ℹ️  Top ~20 from getTokenLargestAccounts, DAS expands beyond 20 if needed');
     console.log(`  Maximum: ${maxHolders}`);
   }
 

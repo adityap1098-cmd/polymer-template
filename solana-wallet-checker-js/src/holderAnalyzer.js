@@ -145,222 +145,343 @@ export class HolderAnalyzer {
     let rawAccounts = []; // Array of { tokenAccount, owner, balance (raw), decimals }
 
     // ═══════════════════════════════════════════════════════════════════
-    // PHASE 1: Get ALL token accounts
-    //   Priority 1: DAS getTokenAccounts → ALL holders, paginated (works on Discover)
-    //   Priority 2: getProgramAccounts → ALL holders (Build plan only)
-    //   Fallback:   getTokenLargestAccounts → top ~20
+    // PHASE 1: Get top token holders
+    //   Step 1: getTokenLargestAccounts → top ~20 by balance (ALWAYS, guaranteed correct)
+    //   Step 2: If limit > 20, EXPAND via DAS getTokenAccounts or getProgramAccounts
+    //
+    //   NOTE: DAS getTokenAccounts returns holders in ARBITRARY order (often smallest
+    //   first), so it CANNOT be the primary method for "top holder" analysis.
+    //   getTokenLargestAccounts is the ONLY method that returns sorted-by-balance.
     // ═══════════════════════════════════════════════════════════════════
 
-    // ── DAS: getTokenAccounts (paginated, works on Discover/free plan) ──
-    if (this.config.useDASTokenAccounts && rawAccounts.length === 0) {
-      console.log('  ⚡ Using DAS getTokenAccounts (paginated holder scan)');
-      try {
-        // First, get token decimals via DAS getAsset
-        let tokenDecimals = 0;
-        try {
-          const assetInfo = await this.rpc.call('getAsset', {
-            id: tokenMint,
-            displayOptions: { showFungible: true },
-          });
-          tokenDecimals = assetInfo?.token_info?.decimals || 0;
-        } catch { /* will use 0 decimals */ }
-
-        // Paginate through token accounts (1000 per page)
-        // Limit pages based on how many holders we need:
-        //   limit × 3 accounts ÷ 1000 per page (headroom for filtering)
-        const neededAccounts = Math.max(limit * 3, 500);
-        const MAX_PAGES = Math.min(10, Math.ceil(neededAccounts / 1000));
-        let page = 1;
-        let hasMore = true;
-
-        while (hasMore && page <= MAX_PAGES) {
-          const result = await this.rpc.call('getTokenAccounts', {
-            mintAddress: tokenMint,
-            page,
-            limit: 1000,
-          });
-
-          const accounts = result?.token_accounts;
-          if (!accounts || !Array.isArray(accounts) || accounts.length === 0) break;
-
-          for (const acct of accounts) {
-            if (!acct.owner) continue;
-            const amount = parseFloat(acct.amount || '0');
-            if (amount <= 0) continue;
-            rawAccounts.push({
-              tokenAccount: acct.address,
-              owner: acct.owner,
-              balance: amount,
-              decimals: tokenDecimals,
-            });
-          }
-
-          // Check if more pages
-          if (accounts.length < 1000) {
-            hasMore = false;
-          } else {
-            page++;
-          }
-        }
-
-        if (rawAccounts.length > 0) {
-          // Sort by balance descending
-          rawAccounts.sort((a, b) => b.balance - a.balance);
-          console.log(`  📊 DAS getTokenAccounts returned ${rawAccounts.length} holders (${page} pages)`);
-        }
-      } catch (err) {
-        console.log(`  ⚠️ DAS getTokenAccounts failed (${err.message}), trying next method`);
-        rawAccounts = [];
-      }
-    }
-
-    // ── getProgramAccounts (Build/paid plan only) ──
-    if (this.config.useProgramAccounts && rawAccounts.length === 0) {
-      console.log('  ⚡ Using getProgramAccounts (full holder scan, paid plan)');
-      try {
-        // Fetch ALL token accounts for this mint using getProgramAccounts
-        // Filters: dataSize=165 (SPL Token Account), memcmp offset=0 (mint field)
-        const result = await this.rpc.call('getProgramAccounts', [
-          TOKEN_PROGRAM_ID,
-          {
-            filters: [
-              { dataSize: 165 },
-              { memcmp: { offset: 0, bytes: tokenMint } },
-            ],
-            encoding: 'jsonParsed',
-          },
-        ]);
-
-        if (result && Array.isArray(result) && result.length > 0) {
-          console.log(`  📊 getProgramAccounts returned ${result.length} total token accounts`);
-          for (const entry of result) {
-            const info = entry.account?.data?.parsed?.info;
-            if (!info || !info.owner) continue;
-            const amount = parseFloat(info.tokenAmount?.amount || '0');
-            if (amount <= 0) continue;
-            rawAccounts.push({
-              tokenAccount: entry.pubkey,
-              owner: info.owner,
-              balance: amount,
-              decimals: info.tokenAmount?.decimals || 0,
-            });
-          }
-
-          // Also check Token-2022 program
-          try {
-            const result2022 = await this.rpc.call('getProgramAccounts', [
-              TOKEN_2022_PROGRAM_ID,
-              {
-                filters: [
-                  { dataSize: 165 },
-                  { memcmp: { offset: 0, bytes: tokenMint } },
-                ],
-                encoding: 'jsonParsed',
-              },
-            ]);
-            if (result2022 && Array.isArray(result2022)) {
-              for (const entry of result2022) {
-                const info = entry.account?.data?.parsed?.info;
-                if (!info || !info.owner) continue;
-                const amount = parseFloat(info.tokenAmount?.amount || '0');
-                if (amount <= 0) continue;
-                rawAccounts.push({
-                  tokenAccount: entry.pubkey,
-                  owner: info.owner,
-                  balance: amount,
-                  decimals: info.tokenAmount?.decimals || 0,
-                });
-              }
-            }
-          } catch { /* Token-2022 not applicable for this mint */ }
-
-          // Sort by balance descending
-          rawAccounts.sort((a, b) => b.balance - a.balance);
-          console.log(`  📊 Total holders with balance > 0: ${rawAccounts.length}`);
-        }
-      } catch (err) {
-        console.log(`  ⚠️ getProgramAccounts failed (${err.message}), falling back to getTokenLargestAccounts`);
-        rawAccounts = [];
-      }
-    }
-
-    // Fallback: getTokenLargestAccounts (free plan or getProgramAccounts failure)
-    if (rawAccounts.length === 0) {
+    // ── Step 1: getTokenLargestAccounts (ALWAYS — guaranteed correct top ~20) ──
+    console.log('  ⚡ Fetching top holders via getTokenLargestAccounts...');
+    try {
       const largest = await this.rpc.call('getTokenLargestAccounts', [tokenMint]);
       if (!largest || !largest.value || largest.value.length === 0) {
-        console.log('No token accounts found for this token');
-        return [];
+        console.log('  ⚠️ getTokenLargestAccounts returned no accounts');
+      } else {
+        const accounts = largest.value;
+        console.log(`  📊 getTokenLargestAccounts: ${accounts.length} largest accounts`);
+
+        // Resolve token accounts → owner wallets
+        let resolved = false;
+        if (this.config.useBatchAccounts) {
+          const BATCH_LIMIT = this.config.batchAccountsLimit;
+          console.log(`  ⚡ Resolving owners via getMultipleAccounts (batch ${BATCH_LIMIT}/call)`);
+          const addresses = accounts.map(a => a.address).filter(Boolean);
+          const amounts = new Map(accounts.map(a => [a.address, parseFloat(a.amount || '0')]));
+
+          try {
+            for (let b = 0; b < addresses.length; b += BATCH_LIMIT) {
+              const chunk = addresses.slice(b, b + BATCH_LIMIT);
+              const batchResult = await this.rpc.call('getMultipleAccounts', [
+                chunk, { encoding: 'jsonParsed' },
+              ]);
+
+              if (batchResult?.value) {
+                for (let i = 0; i < batchResult.value.length; i++) {
+                  const acctData = batchResult.value[i];
+                  const address = chunk[i];
+                  const amount = amounts.get(address) || 0;
+                  if (!acctData || amount <= 0) continue;
+
+                  const parsed = acctData.data?.parsed || {};
+                  const info = parsed.info || {};
+                  const owner = info.owner;
+                  if (!owner || owner.length < 32) continue;
+
+                  const decimals = info.tokenAmount?.decimals || 0;
+                  rawAccounts.push({ tokenAccount: address, owner, balance: amount, decimals });
+                }
+              }
+            }
+            if (rawAccounts.length > 0) resolved = true;
+          } catch (err) {
+            console.log(`  ⚠️ getMultipleAccounts failed (${err.message}), falling back to sequential`);
+          }
+        }
+
+        // Sequential fallback
+        if (!resolved) {
+          for (let i = 0; i < accounts.length; i++) {
+            try {
+              const accountInfo = accounts[i];
+              const address = accountInfo.address;
+              const amount = parseFloat(accountInfo.amount || '0');
+              if (!address || amount <= 0) continue;
+
+              const accountData = await this.rpc.call('getAccountInfo', [
+                address, { encoding: 'jsonParsed' },
+              ]);
+              if (!accountData || !accountData.value) continue;
+              const parsed = accountData.value?.data?.parsed || {};
+              const info = parsed.info || {};
+              const owner = info.owner;
+              if (!owner || owner.length < 32) continue;
+
+              const decimals = info.tokenAmount?.decimals || 0;
+              rawAccounts.push({ tokenAccount: address, owner, balance: amount, decimals });
+
+              if ((i + 1) % 5 === 0) {
+                console.log(`  Processed ${i + 1}/${accounts.length} accounts...`);
+              }
+            } catch { continue; }
+          }
+        }
+
+        rawAccounts.sort((a, b) => b.balance - a.balance);
+        console.log(`  ✅ Top ${rawAccounts.length} holders resolved from getTokenLargestAccounts`);
+      }
+    } catch (err) {
+      console.log(`  ⚠️ getTokenLargestAccounts failed: ${err.message}`);
+    }
+
+    // ── Step 2: Expand beyond top 20 if user requested more ──
+    //   getTokenLargestAccounts caps at ~20 accounts. If limit > resolved,
+    //   use DAS (all pages, sort locally) or getProgramAccounts to find more.
+    if (rawAccounts.length > 0 && rawAccounts.length < limit) {
+      const existingOwners = new Set(rawAccounts.map(a => a.owner));
+      const existingTokenAccounts = new Set(rawAccounts.map(a => a.tokenAccount));
+
+      // ── DAS: getTokenAccounts (paginated, fetch ALL to sort correctly) ──
+      if (this.config.useDASTokenAccounts) {
+        console.log(`  📡 Expanding holders via DAS getTokenAccounts (have ${rawAccounts.length}, need ${limit})...`);
+        try {
+          // Get token decimals via DAS getAsset
+          let tokenDecimals = 0;
+          try {
+            const assetInfo = await this.rpc.call('getAsset', {
+              id: tokenMint,
+              displayOptions: { showFungible: true },
+            });
+            tokenDecimals = assetInfo?.token_info?.decimals || 0;
+          } catch { /* will use 0 decimals */ }
+
+          // Fetch ALL pages to sort locally (DAS doesn't sort by balance)
+          // Cap at 50 pages (50k accounts) to avoid excessive RPC calls
+          const MAX_PAGES = 50;
+          let page = 1;
+          let hasMore = true;
+          const dasAccounts = [];
+
+          while (hasMore && page <= MAX_PAGES) {
+            const result = await this.rpc.call('getTokenAccounts', {
+              mintAddress: tokenMint,
+              page,
+              limit: 1000,
+            });
+
+            const accounts = result?.token_accounts;
+            if (!accounts || !Array.isArray(accounts) || accounts.length === 0) break;
+
+            for (const acct of accounts) {
+              if (!acct.owner) continue;
+              const amount = parseFloat(acct.amount || '0');
+              if (amount <= 0) continue;
+              // Skip accounts already resolved from getTokenLargestAccounts
+              if (existingOwners.has(acct.owner) || existingTokenAccounts.has(acct.address)) continue;
+              dasAccounts.push({
+                tokenAccount: acct.address,
+                owner: acct.owner,
+                balance: amount,
+                decimals: tokenDecimals,
+              });
+            }
+
+            if (accounts.length < 1000) {
+              hasMore = false;
+            } else {
+              page++;
+            }
+          }
+
+          if (dasAccounts.length > 0) {
+            // Sort DAS results by balance descending
+            dasAccounts.sort((a, b) => b.balance - a.balance);
+            // Take only what we need to reach limit (× 3 headroom for filtering)
+            const needed = Math.max((limit - rawAccounts.length) * 3, 50);
+            const topDas = dasAccounts.slice(0, needed);
+            rawAccounts.push(...topDas);
+            rawAccounts.sort((a, b) => b.balance - a.balance);
+            console.log(`  📊 DAS expansion: +${topDas.length} holders from ${dasAccounts.length} DAS accounts (${page} pages)`);
+          } else {
+            console.log(`  📊 DAS: no additional holders found beyond getTokenLargestAccounts`);
+          }
+        } catch (err) {
+          console.log(`  ⚠️ DAS getTokenAccounts failed (${err.message})`);
+        }
       }
 
-      const accounts = largest.value;
-      console.log(`Found ${accounts.length} token accounts (getTokenLargestAccounts max ~20)`);
-
-      // Resolve token accounts to owner wallets
-      if (this.config.useBatchAccounts) {
-        const BATCH_LIMIT = this.config.batchAccountsLimit;
-        console.log(`  ⚡ Using getMultipleAccounts (batch mode, ${BATCH_LIMIT}/call)`);
-        const addresses = accounts.map(a => a.address).filter(Boolean);
-        const amounts = new Map(accounts.map(a => [a.address, parseFloat(a.amount || '0')]));
-
+      // ── getProgramAccounts (Build/paid plan only) ──
+      if (this.config.useProgramAccounts && rawAccounts.length < limit) {
+        console.log(`  ⚡ Expanding via getProgramAccounts (paid plan, full holder scan)...`);
         try {
-          // Chunk into batches respecting QuickNode plan limit
-          for (let b = 0; b < addresses.length; b += BATCH_LIMIT) {
-            const chunk = addresses.slice(b, b + BATCH_LIMIT);
-            const batchResult = await this.rpc.call('getMultipleAccounts', [
-              chunk, { encoding: 'jsonParsed' },
-            ]);
+          const result = await this.rpc.call('getProgramAccounts', [
+            TOKEN_PROGRAM_ID,
+            {
+              filters: [
+                { dataSize: 165 },
+                { memcmp: { offset: 0, bytes: tokenMint } },
+              ],
+              encoding: 'jsonParsed',
+            },
+          ]);
 
-            if (batchResult?.value) {
-              for (let i = 0; i < batchResult.value.length; i++) {
-                const acctData = batchResult.value[i];
-                const address = chunk[i];
-                const amount = amounts.get(address) || 0;
-                if (!acctData || amount <= 0) continue;
+          if (result && Array.isArray(result) && result.length > 0) {
+            console.log(`  📊 getProgramAccounts returned ${result.length} total token accounts`);
+            const programAccounts = [];
+            for (const entry of result) {
+              const info = entry.account?.data?.parsed?.info;
+              if (!info || !info.owner) continue;
+              const amount = parseFloat(info.tokenAmount?.amount || '0');
+              if (amount <= 0) continue;
+              if (existingOwners.has(info.owner)) continue;
+              programAccounts.push({
+                tokenAccount: entry.pubkey,
+                owner: info.owner,
+                balance: amount,
+                decimals: info.tokenAmount?.decimals || 0,
+              });
+            }
 
-                const parsed = acctData.data?.parsed || {};
-                const info = parsed.info || {};
-                const owner = info.owner;
-                if (!owner || owner.length < 32) continue;
-
-                const decimals = info.tokenAmount?.decimals || 0;
-                rawAccounts.push({ tokenAccount: address, owner, balance: amount, decimals });
+            // Also check Token-2022 program
+            try {
+              const result2022 = await this.rpc.call('getProgramAccounts', [
+                TOKEN_2022_PROGRAM_ID,
+                {
+                  filters: [
+                    { dataSize: 165 },
+                    { memcmp: { offset: 0, bytes: tokenMint } },
+                  ],
+                  encoding: 'jsonParsed',
+                },
+              ]);
+              if (result2022 && Array.isArray(result2022)) {
+                for (const entry of result2022) {
+                  const info = entry.account?.data?.parsed?.info;
+                  if (!info || !info.owner) continue;
+                  const amount = parseFloat(info.tokenAmount?.amount || '0');
+                  if (amount <= 0) continue;
+                  if (existingOwners.has(info.owner)) continue;
+                  programAccounts.push({
+                    tokenAccount: entry.pubkey,
+                    owner: info.owner,
+                    balance: amount,
+                    decimals: info.tokenAmount?.decimals || 0,
+                  });
+                }
               }
+            } catch { /* Token-2022 not applicable for this mint */ }
+
+            if (programAccounts.length > 0) {
+              programAccounts.sort((a, b) => b.balance - a.balance);
+              rawAccounts.push(...programAccounts);
+              rawAccounts.sort((a, b) => b.balance - a.balance);
+              console.log(`  📊 getProgramAccounts expansion: +${programAccounts.length} holders`);
             }
           }
         } catch (err) {
-          console.log(`  ⚠️ getMultipleAccounts failed (${err.message}), falling back to sequential`);
+          console.log(`  ⚠️ getProgramAccounts failed: ${err.message}`);
         }
       }
+    }
 
-      // Sequential fallback
-      if (rawAccounts.length === 0) {
-        for (let i = 0; i < accounts.length; i++) {
+    // ── Fallback: If getTokenLargestAccounts failed, try DAS or getProgramAccounts as primary ──
+    if (rawAccounts.length === 0) {
+      console.log('  ⚠️ getTokenLargestAccounts unavailable, trying fallback methods...');
+
+      // Try DAS as primary fallback (fetch all pages, sort locally)
+      if (this.config.useDASTokenAccounts) {
+        console.log('  📡 Fallback: DAS getTokenAccounts (full scan)...');
+        try {
+          let tokenDecimals = 0;
           try {
-            const accountInfo = accounts[i];
-            const address = accountInfo.address;
-            const amount = parseFloat(accountInfo.amount || '0');
-            if (!address || amount <= 0) continue;
+            const assetInfo = await this.rpc.call('getAsset', {
+              id: tokenMint,
+              displayOptions: { showFungible: true },
+            });
+            tokenDecimals = assetInfo?.token_info?.decimals || 0;
+          } catch { /* will use 0 decimals */ }
 
-            const accountData = await this.rpc.call('getAccountInfo', [
-              address, { encoding: 'jsonParsed' },
-            ]);
-            if (!accountData || !accountData.value) continue;
-            const parsed = accountData.value?.data?.parsed || {};
-            const info = parsed.info || {};
-            const owner = info.owner;
-            if (!owner || owner.length < 32) continue;
+          const MAX_PAGES = 50;
+          let page = 1;
+          let hasMore = true;
 
-            const decimals = info.tokenAmount?.decimals || 0;
-            rawAccounts.push({ tokenAccount: address, owner, balance: amount, decimals });
+          while (hasMore && page <= MAX_PAGES) {
+            const result = await this.rpc.call('getTokenAccounts', {
+              mintAddress: tokenMint,
+              page,
+              limit: 1000,
+            });
 
-            if ((i + 1) % 5 === 0) {
-              console.log(`  Processed ${i + 1}/${accounts.length} accounts...`);
+            const accounts = result?.token_accounts;
+            if (!accounts || !Array.isArray(accounts) || accounts.length === 0) break;
+
+            for (const acct of accounts) {
+              if (!acct.owner) continue;
+              const amount = parseFloat(acct.amount || '0');
+              if (amount <= 0) continue;
+              rawAccounts.push({
+                tokenAccount: acct.address,
+                owner: acct.owner,
+                balance: amount,
+                decimals: tokenDecimals,
+              });
             }
-          } catch { continue; }
+
+            if (accounts.length < 1000) {
+              hasMore = false;
+            } else {
+              page++;
+            }
+          }
+
+          if (rawAccounts.length > 0) {
+            rawAccounts.sort((a, b) => b.balance - a.balance);
+            console.log(`  📊 DAS fallback: ${rawAccounts.length} holders (${page} pages), sorted by balance`);
+          }
+        } catch (err) {
+          console.log(`  ⚠️ DAS fallback failed: ${err.message}`);
+          rawAccounts = [];
         }
       }
 
-      rawAccounts.sort((a, b) => b.balance - a.balance);
+      // Try getProgramAccounts as last resort
+      if (this.config.useProgramAccounts && rawAccounts.length === 0) {
+        console.log('  📡 Fallback: getProgramAccounts (paid plan)...');
+        try {
+          const result = await this.rpc.call('getProgramAccounts', [
+            TOKEN_PROGRAM_ID,
+            {
+              filters: [
+                { dataSize: 165 },
+                { memcmp: { offset: 0, bytes: tokenMint } },
+              ],
+              encoding: 'jsonParsed',
+            },
+          ]);
+
+          if (result && Array.isArray(result) && result.length > 0) {
+            for (const entry of result) {
+              const info = entry.account?.data?.parsed?.info;
+              if (!info || !info.owner) continue;
+              const amount = parseFloat(info.tokenAmount?.amount || '0');
+              if (amount <= 0) continue;
+              rawAccounts.push({
+                tokenAccount: entry.pubkey,
+                owner: info.owner,
+                balance: amount,
+                decimals: info.tokenAmount?.decimals || 0,
+              });
+            }
+            rawAccounts.sort((a, b) => b.balance - a.balance);
+            console.log(`  📊 getProgramAccounts fallback: ${rawAccounts.length} holders`);
+          }
+        } catch (err) {
+          console.log(`  ⚠️ getProgramAccounts fallback failed: ${err.message}`);
+        }
+      }
     }
 
     if (rawAccounts.length === 0) {
@@ -447,7 +568,7 @@ export class HolderAnalyzer {
 
     // ═══════════════════════════════════════════════════════════════════
     // PHASE 2.7: Pre-limit — only check top N wallets in Phase 3
-    //   When DAS getTokenAccounts returns thousands of holders,
+    //   When DAS expansion or getProgramAccounts returns many holders,
     //   we only need to PDA-check the top candidates (by balance).
     //   Use limit × 3 to have headroom for PDA filtering.
     // ═══════════════════════════════════════════════════════════════════
