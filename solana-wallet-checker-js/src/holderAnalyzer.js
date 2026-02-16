@@ -1833,6 +1833,120 @@ export class HolderAnalyzer {
     lines.push(supplyLine);
     lines.push('═'.repeat(80));
 
+    // ═══════════════════════════════════════════════════════════════════
+    // LEGEND: Panduan Indikator & Arti Nilai Poin
+    // ═══════════════════════════════════════════════════════════════════
+    lines.push('');
+    lines.push('╔' + '═'.repeat(78) + '╗');
+    lines.push('║  📖 PANDUAN INDIKATOR & ARTI POIN                                            ║');
+    lines.push('╚' + '═'.repeat(78) + '╝');
+
+    lines.push('');
+    lines.push('  ── RISK SCORE PER HOLDER (0-100) ────────────────────────────────────────────');
+    lines.push('  Skor risiko individual dihitung dari 7 faktor. Semakin tinggi = semakin curiga.');
+    lines.push('  🟢 0-29  LOW      Holder terlihat normal, tidak ada tanda mencurigakan');
+    lines.push('  🟡 30-49 MEDIUM   Ada beberapa faktor risiko, perlu diperhatikan');
+    lines.push('  🟠 50-69 HIGH     Indikasi kuat manipulasi atau sybil');
+    lines.push('  🔴 70+   CRITICAL Sangat mungkin manipulator/insider');
+
+    lines.push('');
+    lines.push('  ── 7 FAKTOR RISK SCORING ────────────────────────────────────────────────────');
+    lines.push('');
+    lines.push('  1️⃣  TOKEN DIVERSITY (0-15pts) — Berapa banyak token yang pernah dimiliki wallet');
+    lines.push('     ❌ 15pts  Tidak ada riwayat trading sama sekali (wallet kosong/baru)');
+    lines.push('     ⚠️  12pts  Sangat sedikit: hanya 1-2 token pernah dimiliki');
+    lines.push('     📊 6pts   Terbatas: 3-5 token saja');
+    lines.push('     ✅ 0pts   Normal: >5 token (diversifikasi wajar)');
+
+    lines.push('');
+    lines.push('  2️⃣  HOLDER CONCENTRATION (0-20pts) — % supply yang dipegang wallet ini');
+    lines.push('     🐋 20pts  Whale: ≥10% supply (dominasi besar)');
+    lines.push('     📊 14pts  Large holder: 5-10% supply');
+    lines.push('     📈 7pts   Notable holder: 2-5% supply');
+    lines.push('     ✅ 0pts   Normal: <2% supply');
+
+    lines.push('');
+    lines.push('  3️⃣  COORDINATED ACTIVITY / JACCARD (0-20pts) — Kesamaan portfolio antar wallet');
+    lines.push('     Jaccard = token_bersama / total_token_unik. Makin tinggi = makin mirip.');
+    lines.push('     🚨 20pts  J≥0.40 + ≥3 wallet → koordinasi tinggi (kemungkinan satu orang)');
+    lines.push('     ⚠️  14pts  J≥0.25 atau ≥2 wallet → koordinasi sedang');
+    lines.push('     ℹ️  7pts   J≥0.15 → kemungkinan terkoordinasi');
+    lines.push('     ✅ 0pts   J<0.15 → tidak ada pola mencurigakan');
+
+    lines.push('');
+    lines.push('  4️⃣  WALLET AGE (0-15pts) — Umur wallet sejak transaksi pertama');
+    lines.push('     🆕 15pts  Brand new: ≤1 hari (wallet dibuat khusus untuk token ini?)');
+    lines.push('     📅 10pts  Very young: 2-7 hari');
+    lines.push('     📅 5pts   Young: 8-30 hari');
+    lines.push('     ✅ 0pts   Normal: >30 hari');
+
+    lines.push('');
+    lines.push('  5️⃣  BUY TIMING (0-10pts) — Apakah beli bersamaan dengan wallet lain');
+    lines.push('     ⏱️  10pts  Beli dalam 30 detik dengan wallet lain (sangat terkoordinasi)');
+    lines.push('     ⏱️  7pts   Beli dalam 1-2 menit');
+    lines.push('     ⏱️  4pts   Beli dalam waktu berdekatan (2-5 menit)');
+    lines.push('     ✅ 0pts   Tidak ada pola timing mencurigakan');
+
+    lines.push('');
+    lines.push('  6️⃣  FUNDING PATTERN (0-10pts) — Asal dana wallet');
+    lines.push('     💰 10pts  Didanai langsung oleh holder lain di token ini');
+    lines.push('     💰 8pts   Didanai dari sumber yang sama dengan holder lain');
+    lines.push('     🎯 5pts   Sniper: wallet didanai <1 jam sebelum pembelian');
+    lines.push('     ✅ 0pts   Sumber dana independen / tidak mencurigakan');
+
+    lines.push('');
+    lines.push('  7️⃣  BEHAVIORAL ANOMALY (0-10pts) — Pola perilaku tidak wajar');
+    lines.push('     🔍 10pts  Whale tanpa riwayat trading (punya banyak token tapi 0 aktivitas)');
+    lines.push('     🤖 7pts   Bot-like: frekuensi transaksi >50 tx/hari');
+    lines.push('     🔍 5pts   Tiny holder tapi aktivitas sangat tinggi');
+    lines.push('     ✅ 0pts   Perilaku normal');
+
+    lines.push('');
+    lines.push('  ── INSIDER DETECTION CONFIDENCE (0-100) ─────────────────────────────────────');
+    lines.push('  Skor keyakinan bahwa sekelompok wallet dikendalikan oleh orang/tim yang sama.');
+    lines.push('');
+    lines.push('  🔴 ≥70  SANGAT MUNGKIN INSIDER     Bukti sangat kuat (banyak sinyal sekaligus)');
+    lines.push('  🟠 45-69 KEMUNGKINAN BESAR INSIDER  Beberapa bukti kuat terdeteksi');
+    lines.push('  🟡 25-44 DICURIGAI TERKAIT          Ada koneksi, tapi belum pasti');
+    lines.push('  ⚪ 10-24 KONEKSI LEMAH              Sedikit kesamaan, bisa kebetulan');
+    lines.push('');
+    lines.push('  Sinyal yang dihitung:');
+    lines.push('  💰 25pts  Didanai dari sumber yang sama (shared funder)');
+    lines.push('  🔗 20pts  Transfer SOL langsung antar-holder');
+    lines.push('  🪙 15pts  Transfer token antar-holder');
+    lines.push('  🔴 35pts  Token overlap sangat tinggi (J≥0.70)');
+    lines.push('  🟠 25pts  Token overlap tinggi (J≥0.40)');
+    lines.push('  🟡 15pts  Token overlap moderate (J≥0.15)');
+    lines.push('  🟡 10pts  Token overlap low-moderate (J≥0.08)');
+    lines.push('  ⏱️  15pts  Beli dalam 60 detik (timing terkoordinasi)');
+    lines.push('  ⏱️  10pts  Beli dalam 1-5 menit');
+    lines.push('  👥 3-5pts Bonus ukuran grup (3+ wallet = 3pts, 5+ = 5pts)');
+    lines.push('  🏷️  -5~-15 Penalti jika banyak wallet punya .sol domain (lebih likely user asli)');
+
+    lines.push('');
+    lines.push('  ── TOKEN HEALTH / OVERALL RISK (0-100) ──────────────────────────────────────');
+    lines.push('  Skor kesehatan token secara keseluruhan:');
+    lines.push('  🟢 0-34  LOW RISK       Distribusi normal, aman');
+    lines.push('  🟡 35-59 MODERATE RISK   Ada indikasi risiko, perlu cek manual');
+    lines.push('  🔴 60+   HIGH RISK       Kemungkinan besar ada manipulasi');
+    lines.push('');
+    lines.push('  Komponen:');
+    lines.push('  Gini coefficient      0-25pts  (≥0.8=25, ≥0.6=15, ≥0.4=5)');
+    lines.push('  Top 5 konsentrasi     0-20pts  (≥50%=20, ≥30%=10)');
+    lines.push('  Wallet baru (≤7d)     0-15pts  (≥50% baru=15, ≥30%=8)');
+    lines.push('  Timing cluster        0-15pts  (≥3 cluster=15, ≥1=8)');
+    lines.push('  Sybil cluster         0-15pts  (≥2 cluster=15, ≥1=8)');
+
+    lines.push('');
+    lines.push('  ── BUBBLE MAP SIMBOL ────────────────────────────────────────────────────────');
+    lines.push('  ⬤  Holder >5% supply          ◉  Holder 1-5% supply');
+    lines.push('  ●  Holder 0.5-1% supply        ○  Holder <0.5% supply');
+    lines.push('  *  Wallet juga muncul di cluster lain (multi-cluster member)');
+    lines.push('  CLUSTER  = Wallet didanai dari sumber yang sama');
+    lines.push('  SIMILAR  = Wallet punya histori token yang mirip (Jaccard)');
+    lines.push('  TIMING   = Wallet beli dalam waktu berdekatan');
+    lines.push('  UNLINKED = Wallet tidak terhubung ke cluster/grup manapun');
+
     lines.push('');
     return lines.join('\n');
   }
