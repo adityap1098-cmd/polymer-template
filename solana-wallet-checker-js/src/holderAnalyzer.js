@@ -94,6 +94,7 @@ export class HolderAnalyzer {
       walletAgePages: config.walletAgePages || 3,
       tokenHistoryEarlyStop: config.tokenHistoryEarlyStop || 50,
       purchaseTimeScanLimit: config.purchaseTimeScanLimit || 1000,
+      holderConcurrency: config.holderConcurrency || 3,
       useBatchAccounts: config.useBatchAccounts || false,
       useEnhancedTx: config.useEnhancedTx || false,
       useDAS: config.useDAS || false,
@@ -521,7 +522,7 @@ export class HolderAnalyzer {
 
     // Get purchase time + entry price + wallet age + token holdings
     // Parallel batched: process CONCURRENCY holders at a time
-    const CONCURRENCY = 3;
+    const CONCURRENCY = this.config.holderConcurrency;
     for (let batch = 0; batch < topHolders.length; batch += CONCURRENCY) {
       const chunk = topHolders.slice(batch, batch + CONCURRENCY);
       const promises = chunk.map(async (holder, localIdx) => {

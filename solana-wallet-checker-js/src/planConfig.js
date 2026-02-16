@@ -23,7 +23,7 @@
 const PLANS = {
   free: {
     name: 'Discover',
-    maxRps: 12,              // 80% of 15 req/s limit
+    maxRps: 15,              // Discover plan: 15 req/s (tested — sustained 0 failures)
     topHolders: 200,         // DAS getTokenAccounts unlocks ALL holders — analyze top 200
     txHistoryPerWallet: 50,  // tx to scan for token history
     walletAgePages: 3,       // 3 × 1000 = 3000 tx for age
@@ -31,6 +31,7 @@ const PLANS = {
     interHolderTxScan: 10,   // last 10 tx per wallet for SOL transfers
     tokenHistoryEarlyStop: 50,  // stop after finding 50 unique tokens
     purchaseTimeScanLimit: 1000, // sigs to scan for first purchase
+    holderConcurrency: 5,    // parallel holder enrichment (5 holders × ~4 RPC = ~20 calls/batch)
 
     // DAS API features on Discover plan
     useBatchAccounts: true,  // getMultipleAccounts works on Discover (max 5/call)
@@ -46,7 +47,7 @@ const PLANS = {
   },
   paid: {
     name: 'Build ($42/mo)',
-    maxRps: 40,              // 80% of 50 req/s limit
+    maxRps: 50,              // Build plan: 50 req/s
     topHolders: 200,         // getProgramAccounts unlocks ALL holders — analyze top 200
     txHistoryPerWallet: 200, // 4× deeper token scan → much better Jaccard
     walletAgePages: 5,       // 5 × 1000 = 5000 tx for age
@@ -54,6 +55,7 @@ const PLANS = {
     interHolderTxScan: 30,   // last 30 tx per wallet for SOL transfers
     tokenHistoryEarlyStop: 150, // stop after 150 unique tokens
     purchaseTimeScanLimit: 3000, // deeper purchase time scan
+    holderConcurrency: 10,   // parallel holder enrichment (10 holders × ~4 RPC = ~40 calls/batch)
 
     // Enhanced API features (enabled on paid)
     useBatchAccounts: true,  // getMultipleAccounts — saves ~19 calls per analysis

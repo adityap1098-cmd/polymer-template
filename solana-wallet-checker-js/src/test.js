@@ -881,7 +881,7 @@ describe('PlanConfig', () => {
 
   it('free plan should have conservative defaults', () => {
     const free = PLANS.free;
-    assert.equal(free.maxRps, 12);
+    assert.equal(free.maxRps, 15);
     assert.equal(free.txHistoryPerWallet, 50);
     assert.equal(free.walletAgePages, 3);
     assert.equal(free.fundingHops, 2);
@@ -889,17 +889,19 @@ describe('PlanConfig', () => {
     assert.equal(free.tokenHistoryEarlyStop, 50);
     assert.equal(free.purchaseTimeScanLimit, 1000);
     assert.equal(free.topHolders, 200);  // DAS getTokenAccounts unlocks ALL holders on Discover too
+    assert.equal(free.holderConcurrency, 5);
   });
 
   it('paid plan should have deeper scanning', () => {
     const paid = PLANS.paid;
-    assert.equal(paid.maxRps, 40);
+    assert.equal(paid.maxRps, 50);
     assert.equal(paid.txHistoryPerWallet, 200);
     assert.equal(paid.walletAgePages, 5);
     assert.equal(paid.fundingHops, 4);
     assert.equal(paid.interHolderTxScan, 30);
     assert.equal(paid.tokenHistoryEarlyStop, 150);
     assert.equal(paid.purchaseTimeScanLimit, 3000);
+    assert.equal(paid.holderConcurrency, 10);
   });
 
   it('paid plan should be strictly better than free', () => {
@@ -923,7 +925,7 @@ describe('PlanConfig', () => {
     }
 
     // Default should be free plan
-    assert.equal(config.maxRps, 12);
+    assert.equal(config.maxRps, 15);
     assert.equal(config.name, 'Discover');
 
     if (oldPlan !== undefined) process.env.QUICKNODE_PLAN = oldPlan;
@@ -936,7 +938,7 @@ describe('PlanConfig', () => {
     delete process.env.FUNDING_HOPS;
 
     const config = getPlanConfig();
-    assert.equal(config.maxRps, 40);
+    assert.equal(config.maxRps, 50);
     assert.equal(config.fundingHops, 4);
     assert.ok(config.name.includes('Build'));
 

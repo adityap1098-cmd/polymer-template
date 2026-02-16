@@ -145,7 +145,7 @@ function printBanner() {
 ╚${'═'.repeat(62)}╝
 `));
   console.log(chalk.gray(`  Plan: ${plan.description}`));
-  console.log(chalk.gray(`  Rate: ${plan.maxRps} req/s | TX scan: ${plan.txHistoryPerWallet}/wallet | Funding: ${plan.fundingHops}-hop`));
+  console.log(chalk.gray(`  Rate: ${plan.maxRps} req/s | Concurrency: ${plan.holderConcurrency || 3} | TX scan: ${plan.txHistoryPerWallet}/wallet | Funding: ${plan.fundingHops}-hop`));
   console.log(chalk.gray(`  APIs: ${apiStr}`));
   console.log('');
 }
