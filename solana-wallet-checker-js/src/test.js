@@ -17,6 +17,7 @@ import {
   identifyExchange, isLiquidityProgram, isUniversalToken, getEntityLabel,
 } from './knownEntities.js';
 import { InsiderDetector } from './insiderDetector.js';
+import { getPlanConfig, PLANS } from './planConfig.js';
 import { writeFileSync, unlinkSync } from 'fs';
 import { PublicKey } from '@solana/web3.js';
 
@@ -858,5 +859,100 @@ describe('InsiderDetector - skip known entity funders', () => {
     const groups = detector.detectInsiderGroups(holders, { groups: [], timingClusters: [] }, funding, []);
     assert.ok(groups.length >= 1, 'Should flag unknown shared funder as insider');
     assert.ok(groups[0].evidence.sharedFunder);
+  });
+});
+
+// ============== Plan Config Tests ==============
+
+describe('PlanConfig', () => {
+  it('PLANS should have free and paid presets', () => {
+    assert.ok(PLANS.free, 'Should have free plan');
+    assert.ok(PLANS.paid, 'Should have paid plan');
+  });
+
+  it('free plan should have conservative defaults', () => {
+    const free = PLANS.free;
+    assert.equal(free.maxRps, 12);
+    assert.equal(free.txHistoryPerWallet, 50);
+    assert.equal(free.walletAgePages, 3);
+    assert.equal(free.fundingHops, 2);
+    assert.equal(free.interHolderTxScan, 10);
+    assert.equal(free.tokenHistoryEarlyStop, 50);
+    assert.equal(free.purchaseTimeScanLimit, 1000);
+    assert.equal(free.topHolders, 20);
+  });
+
+  it('paid plan should have deeper scanning', () => {
+    const paid = PLANS.paid;
+    assert.equal(paid.maxRps, 40);
+    assert.equal(paid.txHistoryPerWallet, 200);
+    assert.equal(paid.walletAgePages, 5);
+    assert.equal(paid.fundingHops, 4);
+    assert.equal(paid.interHolderTxScan, 30);
+    assert.equal(paid.tokenHistoryEarlyStop, 150);
+    assert.equal(paid.purchaseTimeScanLimit, 3000);
+  });
+
+  it('paid plan should be strictly better than free', () => {
+    for (const key of ['maxRps', 'txHistoryPerWallet', 'walletAgePages', 'fundingHops', 'interHolderTxScan', 'tokenHistoryEarlyStop', 'purchaseTimeScanLimit']) {
+      assert.ok(PLANS.paid[key] > PLANS.free[key], `paid.${key} (${PLANS.paid[key]}) should be > free.${key} (${PLANS.free[key]})`);
+    }
+  });
+
+  it('getPlanConfig() should return object with all required fields', () => {
+    const oldPlan = process.env.QUICKNODE_PLAN;
+    delete process.env.QUICKNODE_PLAN;
+    delete process.env.MAX_RPS;
+    delete process.env.TOP_HOLDERS;
+    delete process.env.TX_HISTORY_PER_WALLET;
+    delete process.env.FUNDING_HOPS;
+
+    const config = getPlanConfig();
+    const required = ['maxRps', 'topHolders', 'txHistoryPerWallet', 'walletAgePages', 'fundingHops', 'interHolderTxScan', 'tokenHistoryEarlyStop', 'purchaseTimeScanLimit', 'name', 'description'];
+    for (const field of required) {
+      assert.ok(config[field] !== undefined, `Missing field: ${field}`);
+    }
+
+    // Default should be free plan
+    assert.equal(config.maxRps, 12);
+    assert.equal(config.name, 'Free');
+
+    if (oldPlan !== undefined) process.env.QUICKNODE_PLAN = oldPlan;
+  });
+
+  it('getPlanConfig() should respect QUICKNODE_PLAN=paid', () => {
+    const oldPlan = process.env.QUICKNODE_PLAN;
+    process.env.QUICKNODE_PLAN = 'paid';
+    delete process.env.MAX_RPS;
+    delete process.env.FUNDING_HOPS;
+
+    const config = getPlanConfig();
+    assert.equal(config.maxRps, 40);
+    assert.equal(config.fundingHops, 4);
+    assert.ok(config.name.includes('Build'));
+
+    if (oldPlan !== undefined) process.env.QUICKNODE_PLAN = oldPlan;
+    else delete process.env.QUICKNODE_PLAN;
+  });
+
+  it('getPlanConfig() should allow env overrides', () => {
+    const oldPlan = process.env.QUICKNODE_PLAN;
+    const oldRps = process.env.MAX_RPS;
+    const oldHops = process.env.FUNDING_HOPS;
+
+    process.env.QUICKNODE_PLAN = 'free';
+    process.env.MAX_RPS = '25';
+    process.env.FUNDING_HOPS = '3';
+
+    const config = getPlanConfig();
+    assert.equal(config.maxRps, 25, 'MAX_RPS override');
+    assert.equal(config.fundingHops, 3, 'FUNDING_HOPS override');
+    // Non-overridden values stay at plan defaults
+    assert.equal(config.walletAgePages, 3);
+
+    // Restore
+    if (oldPlan !== undefined) process.env.QUICKNODE_PLAN = oldPlan; else delete process.env.QUICKNODE_PLAN;
+    if (oldRps !== undefined) process.env.MAX_RPS = oldRps; else delete process.env.MAX_RPS;
+    if (oldHops !== undefined) process.env.FUNDING_HOPS = oldHops; else delete process.env.FUNDING_HOPS;
   });
 });

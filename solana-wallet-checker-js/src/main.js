@@ -28,6 +28,7 @@ import { HolderAnalyzer } from './holderAnalyzer.js';
 import { FundingAnalyzer } from './fundingAnalyzer.js';
 import { InsiderDetector } from './insiderDetector.js';
 import { CSVImporter } from './csvImporter.js';
+import { getPlanConfig } from './planConfig.js';
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
@@ -71,18 +72,22 @@ function validateSolanaAddress(address) {
 // ─── Banner ─────────────────────────────────────────────────────────────────
 
 function printBanner() {
+  const plan = getPlanConfig();
   console.log(chalk.cyan(`
-╔══════════════════════════════════════════════════════════════╗
-║          🔍 SOLANA WALLET CHECKER BOT v2.1 🔍                 ║
+╔${'═'.repeat(62)}╗
+║          🔍 SOLANA WALLET CHECKER BOT v3.0 🔍                 ║
 ║            Node.js + @solana/web3.js edition                   ║
 ║                                                                ║
 ║  Enhanced Analysis:                                            ║
 ║  • Jaccard Similarity · Gini Coefficient                       ║
-║  • Funding Chain / Sybil Detection                             ║
+║  • Funding Chain / Sybil Detection (${String(plan.fundingHops)}-hop)                   ║
 ║  • 🕵️  Insider/Team Detection (multi-signal)                   ║
 ║  • Inter-holder Transfer · Buy-Timing Correlation              ║
-╚══════════════════════════════════════════════════════════════╝
+╚${'═'.repeat(62)}╝
 `));
+  console.log(chalk.gray(`  Plan: ${plan.description}`));
+  console.log(chalk.gray(`  Rate: ${plan.maxRps} req/s | TX scan: ${plan.txHistoryPerWallet}/wallet | Funding: ${plan.fundingHops}-hop`));
+  console.log('');
 }
 
 // ─── Wallet Report ──────────────────────────────────────────────────────────
@@ -206,20 +211,21 @@ class WalletCheckerBot {
 
 async function analyzeTopHolders(tokenAddress) {
   const rpcUrl = process.env.SOLANA_RPC_URL || 'https://api.mainnet-beta.solana.com';
+  const plan = getPlanConfig();
 
   console.log(chalk.yellow('\nHow many top holders to analyze?'));
-  console.log('  Recommended: 15-20 (balanced speed and coverage)');
+  console.log(`  Recommended: 15-20 (balanced speed and coverage)`);
   console.log('  ⚠️  Note: Solana RPC typically returns ~20 largest accounts (API limitation)');
-  console.log('  Maximum input: 50, but actual results may be limited by Solana API');
+  console.log(`  Maximum input: 50, but actual results may be limited by Solana API`);
 
-  const holderInput = await ask(chalk.green('\nNumber of holders [default: 20] > '));
+  const holderInput = await ask(chalk.green(`\nNumber of holders [default: ${plan.topHolders}] > `));
   let holderLimit = parseInt(holderInput, 10);
-  if (isNaN(holderLimit)) holderLimit = 20;
+  if (isNaN(holderLimit)) holderLimit = plan.topHolders;
   holderLimit = Math.max(5, Math.min(50, holderLimit));
 
-  console.log(chalk.cyan(`\n🔍 Analyzing Top ${holderLimit} Token Holders (Enhanced)...\n`));
+  console.log(chalk.cyan(`\n🔍 Analyzing Top ${holderLimit} Token Holders (${plan.name} mode)...\n`));
 
-  const analyzer = new HolderAnalyzer(rpcUrl);
+  const analyzer = new HolderAnalyzer(rpcUrl, plan);
 
   try {
     const result = await analyzer.getTokenHolders(tokenAddress, holderLimit);
@@ -256,7 +262,7 @@ async function analyzeTopHolders(tokenAddress) {
 
     // Step 3: Run funding chain analysis (mode 3)
     if (mode >= 3) {
-      const fundingAna = new FundingAnalyzer(rpcUrl);
+      const fundingAna = new FundingAnalyzer(rpcUrl, plan);
       fundingAnalysis = await fundingAna.analyzeFundingChains(holders);
       if (fundingAnalysis.totalClusters > 0) {
         console.log(chalk.green(`💰 Found ${fundingAnalysis.totalClusters} sybil cluster(s)`));
@@ -266,7 +272,7 @@ async function analyzeTopHolders(tokenAddress) {
       }
 
       // Step 4: Insider/Team Detection — combines ALL signals
-      const insiderDetector = new InsiderDetector(rpcUrl);
+      const insiderDetector = new InsiderDetector(rpcUrl, plan.maxRps, plan);
       console.log(chalk.cyan('\n🕵️  Running insider/team detection...'));
       const interHolderTransfers = await insiderDetector.detectInterHolderTransfers(holders);
       insiderGroups = insiderDetector.detectInsiderGroups(
@@ -285,7 +291,7 @@ async function analyzeTopHolders(tokenAddress) {
     // Append insider groups
     let insiderOutput = '';
     if (insiderGroups.length > 0 && mode >= 3) {
-      const insiderDetector = new InsiderDetector(rpcUrl);
+      const insiderDetector = new InsiderDetector(rpcUrl, plan.maxRps, plan);
       insiderOutput = insiderDetector.formatInsiderOutput(insiderGroups, holders, fundingAnalysis);
       console.log(insiderOutput);
     }
@@ -293,7 +299,7 @@ async function analyzeTopHolders(tokenAddress) {
     // Append funding analysis to output if mode 3
     let fundingOutput = '';
     if (fundingAnalysis && mode >= 3) {
-      const fundingAna = new FundingAnalyzer(rpcUrl);
+      const fundingAna = new FundingAnalyzer(rpcUrl, plan);
       fundingOutput = fundingAna.formatFundingOutput(fundingAnalysis, holders);
       console.log(fundingOutput);
     }
@@ -374,7 +380,7 @@ async function analyzeFromCSV() {
       }
 
       if (finalTokenAddress) {
-        const analyzer = new HolderAnalyzer(rpcUrl);
+        const analyzer = new HolderAnalyzer(rpcUrl, getPlanConfig());
         try {
           console.log(chalk.cyan('\n🔍 Analyzing trading patterns...'));
           similarityAnalysis = await analyzer.analyzeHolderSimilarities(holders, finalTokenAddress);
@@ -392,7 +398,7 @@ async function analyzeFromCSV() {
     // Format and display output with risk scoring
     console.log(chalk.cyan('\n📊 Generating risk analysis report...\n'));
 
-    const analyzer = new HolderAnalyzer(rpcUrl);
+    const analyzer = new HolderAnalyzer(rpcUrl, getPlanConfig());
     const output = analyzer.formatHoldersOutput(holders, finalTokenAddress || 'Unknown', similarityAnalysis);
     console.log(output);
 

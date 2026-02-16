@@ -63,11 +63,18 @@ export function jaccardSimilarity(setA, setB) {
 export class HolderAnalyzer {
   /**
    * @param {string} rpcUrl - Solana RPC endpoint URL
-   * @param {number} [maxRps=12] - Max requests per second (QuickNode free: 15/s)
+   * @param {object} [config] - Plan configuration (from planConfig.js)
    */
-  constructor(rpcUrl, maxRps = 12) {
+  constructor(rpcUrl, config = {}) {
     this.rpcUrl = rpcUrl;
-    this.rpc = new RateLimitedRPC(rpcUrl, maxRps);
+    this.config = {
+      maxRps: config.maxRps || 12,
+      txHistoryPerWallet: config.txHistoryPerWallet || 50,
+      walletAgePages: config.walletAgePages || 3,
+      tokenHistoryEarlyStop: config.tokenHistoryEarlyStop || 50,
+      purchaseTimeScanLimit: config.purchaseTimeScanLimit || 1000,
+    };
+    this.rpc = new RateLimitedRPC(rpcUrl, this.config.maxRps);
   }
 
   // ─── Token Holders Fetch ────────────────────────────────────────────────
@@ -175,7 +182,7 @@ export class HolderAnalyzer {
         // getTokenAccountsByOwner misses closed accounts (sold tokens)!
         // Must scan tx history to find ALL tokens ever traded.
         const tokenData = await this._getWalletTokenAccounts(topHolders[i].owner, tokenMint);
-        const historicalTokens = await this._getWalletTokenHistory(topHolders[i].owner, tokenMint, 50);
+        const historicalTokens = await this._getWalletTokenHistory(topHolders[i].owner, tokenMint, this.config.txHistoryPerWallet);
         const combinedTokens = new Set([...tokenData.allTokens, ...historicalTokens]);
         topHolders[i].tradedTokens = combinedTokens;
         topHolders[i].tokenCount = tokenData.tokenCount; // actual currently-held count
@@ -215,7 +222,7 @@ export class HolderAnalyzer {
       let newestBlockTime = null;
       let totalTx = 0;
       let before = undefined;
-      const MAX_PAGES = 3; // max 3 × 1000 = 3000 txs
+      const MAX_PAGES = this.config.walletAgePages; // configurable: 3 (free) or 5 (paid)
 
       for (let page = 0; page < MAX_PAGES; page++) {
         const opts = { limit: 1000 };
@@ -308,11 +315,13 @@ export class HolderAnalyzer {
    * @param {number} limit — number of recent txs to scan (default: 50)
    * @returns {Promise<Set<string>>}
    */
-  async _getWalletTokenHistory(wallet, excludeToken = null, limit = 50) {
+  async _getWalletTokenHistory(wallet, excludeToken = null, limit = null) {
     const tokens = new Set();
+    const scanLimit = limit || this.config.txHistoryPerWallet;
+    const earlyStop = this.config.tokenHistoryEarlyStop;
 
     try {
-      const signatures = await this.rpc.call('getSignaturesForAddress', [wallet, { limit }]);
+      const signatures = await this.rpc.call('getSignaturesForAddress', [wallet, { limit: scanLimit }]);
       if (!signatures || !Array.isArray(signatures)) return tokens;
 
       for (const sigInfo of signatures) {
@@ -348,7 +357,7 @@ export class HolderAnalyzer {
         } catch { continue; }
 
         // Early stop: found enough tokens for meaningful Jaccard comparison
-        if (tokens.size >= 50) break;
+        if (tokens.size >= earlyStop) break;
       }
     } catch { /* empty */ }
 
@@ -436,7 +445,7 @@ export class HolderAnalyzer {
         // Fallback: combined current + historical
         try {
           const tokenData = await this._getWalletTokenAccounts(holders[i].owner, currentToken);
-          const historical = await this._getWalletTokenHistory(holders[i].owner, currentToken, 50);
+          const historical = await this._getWalletTokenHistory(holders[i].owner, currentToken);
           holders[i].tradedTokens = new Set([...tokenData.allTokens, ...historical]);
           holders[i].tokenCount = tokenData.tokenCount;
           holders[i].historicalTokenCount = holders[i].tradedTokens.size;
@@ -832,8 +841,8 @@ export class HolderAnalyzer {
 
   async _getFirstPurchaseTime(wallet, tokenMint) {
     try {
-      // Fetch up to 1000 signatures to find actual purchase (was 50)
-      const signatures = await this.rpc.call('getSignaturesForAddress', [wallet, { limit: 1000 }]);
+      const scanLimit = this.config.purchaseTimeScanLimit;
+      const signatures = await this.rpc.call('getSignaturesForAddress', [wallet, { limit: scanLimit }]);
       if (!signatures || !Array.isArray(signatures) || signatures.length === 0) return null;
 
       // Sort ascending (oldest first)

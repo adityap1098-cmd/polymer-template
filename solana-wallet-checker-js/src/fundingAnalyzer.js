@@ -15,51 +15,75 @@ import { isLiquidityProgram, identifyExchange, getEntityLabel } from './knownEnt
 export class FundingAnalyzer {
   /**
    * @param {string} rpcUrl
-   * @param {number} [maxRps=12]
+   * @param {object} [config] - Plan configuration
    */
-  constructor(rpcUrl, maxRps = 12) {
-    this.rpc = new RateLimitedRPC(rpcUrl, maxRps);
+  constructor(rpcUrl, config = {}) {
+    this.config = {
+      maxRps: config.maxRps || 12,
+      fundingHops: config.fundingHops || 2,
+    };
+    this.rpc = new RateLimitedRPC(rpcUrl, this.config.maxRps);
   }
 
   /**
    * Analyze funding origins for a list of holder wallets.
-   * Traces the initial SOL funder for each wallet (up to 2 hops).
+   * Traces the initial SOL funder for each wallet (configurable hops: 2 or 4).
    * 
    * @param {Array<{owner: string}>} holders
    * @returns {Promise<FundingAnalysisResult>}
    */
   async analyzeFundingChains(holders) {
-    console.log(`\n💰 Analyzing funding chains for ${holders.length} wallets...`);
+    const maxHops = this.config.fundingHops;
+    console.log(`\n💰 Analyzing funding chains for ${holders.length} wallets (${maxHops}-hop)...`);
 
-    const fundingMap = new Map(); // wallet → { funder, funderOfFunder, fundedAt, fundingAmount }
+    const fundingMap = new Map(); // wallet → { funder, chain: [...], fundedAt, fundingAmount }
 
     for (let i = 0; i < holders.length; i++) {
       const wallet = holders[i].owner;
 
       try {
-        // Hop 1: Find who first funded this wallet with SOL
-        const hop1 = await this._findInitialFunder(wallet);
+        // Trace up to maxHops hops
+        const chain = [];
+        let currentAddr = wallet;
+        let firstFunder = null;
+        let firstTimestamp = null;
+        let firstAmount = 0;
+
+        for (let hop = 0; hop < maxHops; hop++) {
+          const hopResult = await this._findInitialFunder(currentAddr);
+          if (!hopResult?.funder) break;
+
+          if (hop === 0) {
+            firstFunder = hopResult.funder;
+            firstTimestamp = hopResult.timestamp;
+            firstAmount = hopResult.amountSOL;
+          }
+
+          chain.push({
+            hop: hop + 1,
+            from: hopResult.funder,
+            amountSOL: hopResult.amountSOL,
+            timestamp: hopResult.timestamp,
+          });
+
+          // Stop if we hit a known entity (exchange/program)
+          if (this._isKnownEntity(hopResult.funder)) break;
+          currentAddr = hopResult.funder;
+        }
+
         const entry = {
           wallet,
-          funder: hop1?.funder || null,
-          fundedAt: hop1?.timestamp || null,
-          fundingAmountSOL: hop1?.amountSOL || 0,
-          funderOfFunder: null,
+          funder: firstFunder,
+          fundedAt: firstTimestamp,
+          fundingAmountSOL: firstAmount,
+          funderOfFunder: chain.length >= 2 ? chain[1].from : null,
+          chain,
+          deepestFunder: chain.length > 0 ? chain[chain.length - 1].from : null,
         };
-
-        // Hop 2: Find who funded the funder (if funder is not a known exchange/program)
-        if (hop1?.funder && !this._isKnownEntity(hop1.funder)) {
-          try {
-            const hop2 = await this._findInitialFunder(hop1.funder);
-            entry.funderOfFunder = hop2?.funder || null;
-          } catch {
-            // Ignore hop2 errors
-          }
-        }
 
         fundingMap.set(wallet, entry);
       } catch {
-        fundingMap.set(wallet, { wallet, funder: null, fundedAt: null, fundingAmountSOL: 0, funderOfFunder: null });
+        fundingMap.set(wallet, { wallet, funder: null, fundedAt: null, fundingAmountSOL: 0, funderOfFunder: null, chain: [], deepestFunder: null });
       }
 
       if ((i + 1) % 3 === 0 || i === holders.length - 1) {
@@ -157,12 +181,12 @@ export class FundingAnalyzer {
   }
 
   /**
-   * Group wallets by shared funder (direct or 2-hop).
+   * Group wallets by shared funder (any hop level).
    * @param {Map} fundingMap
    * @returns {Array<FundingCluster>}
    */
   _detectFundingClusters(fundingMap) {
-    // Group by direct funder
+    // Group by ALL funders in chain
     const funderGroups = new Map();
 
     for (const [wallet, data] of fundingMap) {
@@ -174,8 +198,18 @@ export class FundingAnalyzer {
       }
       funderGroups.get(data.funder).add(wallet);
 
-      // Also group by funder-of-funder (2-hop)
-      if (data.funderOfFunder) {
+      // All hops in the chain
+      if (data.chain) {
+        for (const hop of data.chain) {
+          if (hop.from && hop.from !== data.funder) {
+            if (!funderGroups.has(hop.from)) {
+              funderGroups.set(hop.from, new Set());
+            }
+            funderGroups.get(hop.from).add(wallet);
+          }
+        }
+      } else if (data.funderOfFunder) {
+        // Legacy 2-hop fallback
         if (!funderGroups.has(data.funderOfFunder)) {
           funderGroups.set(data.funderOfFunder, new Set());
         }
@@ -327,8 +361,16 @@ export class FundingAnalyzer {
       let funderLine = `    ← ${data.funder}${labelStr}`;
       if (timeAmount) funderLine += `  [${timeAmount}]`;
 
-      // Hop 2
-      if (data.funderOfFunder) {
+      // Show full chain (all hops)
+      if (data.chain && data.chain.length >= 2) {
+        for (let h = 1; h < data.chain.length; h++) {
+          const hopData = data.chain[h];
+          const hopLabel = getEntityLabel(hopData.from);
+          const hopStr = hopLabel ? ` ${hopLabel}` : '';
+          funderLine += `\n      ${'  '.repeat(h)}← ${hopData.from}${hopStr}`;
+        }
+      } else if (data.funderOfFunder) {
+        // Legacy 2-hop fallback
         const hop2Label = getEntityLabel(data.funderOfFunder);
         const hop2Str = hop2Label ? ` ${hop2Label}` : '';
         funderLine += `\n      ← ${data.funderOfFunder}${hop2Str}`;

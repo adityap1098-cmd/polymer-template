@@ -17,8 +17,9 @@ import { isUniversalToken, getEntityLabel, identifyExchange, isLiquidityProgram 
 const TOKEN_PROGRAM_ID = 'TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA';
 
 export class InsiderDetector {
-  constructor(rpcUrl, maxRps = 12) {
+  constructor(rpcUrl, maxRps = 12, config = {}) {
     this.rpc = new RateLimitedRPC(rpcUrl, maxRps);
+    this.interHolderTxScan = config.interHolderTxScan || 10;
   }
 
   /**
@@ -29,7 +30,7 @@ export class InsiderDetector {
    * @returns {Promise<Array<{from, to, amountSOL, timestamp}>>}
    */
   async detectInterHolderTransfers(holders) {
-    console.log(`\n🔗 Checking inter-holder SOL transfers (${holders.length} wallets)...`);
+    console.log(`\n🔗 Checking inter-holder SOL transfers (${holders.length} wallets, last ${this.interHolderTxScan} tx each)...`);
     const holderSet = new Set(holders.map(h => h.owner));
     const transfers = [];
 
@@ -40,8 +41,8 @@ export class InsiderDetector {
         ]);
         if (!sigs || sigs.length === 0) continue;
 
-        // Check last 10 txs for SOL transfers to/from other holders
-        for (const sigInfo of sigs.slice(0, 10)) {
+        // Check last N txs for SOL transfers to/from other holders
+        for (const sigInfo of sigs.slice(0, this.interHolderTxScan)) {
           if (!sigInfo.signature) continue;
           try {
             const tx = await this.rpc.call('getTransaction', [
