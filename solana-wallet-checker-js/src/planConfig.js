@@ -27,16 +27,16 @@ const PLANS = {
     tokenHistoryEarlyStop: 50,  // stop after finding 50 unique tokens
     purchaseTimeScanLimit: 1000, // sigs to scan for first purchase
 
-    // Enhanced API features (disabled on free)
+    // Enhanced API features on Discover plan
     useBatchAccounts: true,  // getMultipleAccounts works on Discover (max 5/call)
     batchAccountsLimit: 5,   // Discover plan: max 5 accounts per getMultipleAccounts call
-    useEnhancedTx: false,    // getTransactionsForAddress (single-call tx fetch)
-    useDAS: false,           // DAS getAssetsByOwner (richer token data)
-    useSNS: false,           // SNS .sol domain detection
-    useProgramAccounts: false, // getProgramAccounts disabled (heavy on free plan)
+    useEnhancedTx: true,     // ✅ getTransactionsForAddress works on Discover
+    useDAS: true,            // ✅ DAS getAssetsByOwner works on Discover
+    useSNS: false,           // ❌ SNS add-on NOT installed — Method not found
+    useProgramAccounts: false, // ❌ getProgramAccounts timeout/disabled on Discover
     detectProgramOwned: true,  // PDA detection via getMultipleAccounts (5/call is enough)
 
-    description: 'QuickNode Free/Discover — 15 req/s, 50K credits/day',
+    description: 'QuickNode Discover — 15 req/s, 50K credits/day (no SNS, no getProgramAccounts)',
   },
   paid: {
     name: 'Build ($42/mo)',

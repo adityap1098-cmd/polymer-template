@@ -976,13 +976,13 @@ describe('PlanConfig', () => {
   });
 
   it('free plan should have limited enhanced features', () => {
-    // Free/Discover: getMultipleAccounts works but limited to 5/call
+    // Discover: getMultipleAccounts works but limited to 5/call
     assert.equal(PLANS.free.useBatchAccounts, true);
     assert.equal(PLANS.free.detectProgramOwned, true);
     assert.equal(PLANS.free.batchAccountsLimit, 5);
-    // These remain disabled on free
-    assert.equal(PLANS.free.useEnhancedTx, false);
-    assert.equal(PLANS.free.useDAS, false);
+    // Discover: enhanced Tx & DAS work, but SNS and getProgramAccounts do NOT
+    assert.equal(PLANS.free.useEnhancedTx, true);
+    assert.equal(PLANS.free.useDAS, true);
     assert.equal(PLANS.free.useSNS, false);
     assert.equal(PLANS.free.useProgramAccounts, false);
   });
