@@ -1755,19 +1755,13 @@ export class HolderAnalyzer {
         const unlinkedPct = effectiveSupply > 0 ? (unlinkedBal / effectiveSupply * 100) : 0;
         lines.push(`  ── UNLINKED (${unlinkedHolders.length} wallets, ${fmtPct(unlinkedPct)}) ──`);
         lines.push('  │');
-        const showCount = Math.min(5, unlinkedHolders.length);
-        for (let i = 0; i < showCount; i++) {
+        for (let i = 0; i < unlinkedHolders.length; i++) {
           const h = unlinkedHolders[i];
           const pct = effectiveSupply > 0 ? (h.balance / effectiveSupply * 100) : 0;
           const risk = h.riskData || { level: '🟢 LOW', score: 0 };
           const riskIcon = risk.level.split(' ')[0];
-          const connector = (i === showCount - 1 && unlinkedHolders.length <= 5) ? '└──' : '├──';
+          const connector = i === unlinkedHolders.length - 1 ? '└──' : '├──';
           lines.push(`  ${connector} ${bubbleChar(pct)} ${fmtPct(pct).padEnd(7)} ${shortAddr(h.owner)}  ${riskIcon}${risk.score}`);
-        }
-        if (unlinkedHolders.length > 5) {
-          const restBal = unlinkedHolders.slice(5).reduce((s, h) => s + h.balance, 0);
-          const restPct = effectiveSupply > 0 ? (restBal / effectiveSupply * 100) : 0;
-          lines.push(`  └── ... ${unlinkedHolders.length - 5} more (${fmtPct(restPct)})`);
         }
         lines.push('');
       }
