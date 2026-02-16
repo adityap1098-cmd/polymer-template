@@ -29,6 +29,7 @@ import { FundingAnalyzer } from './fundingAnalyzer.js';
 import { InsiderDetector } from './insiderDetector.js';
 import { CSVImporter } from './csvImporter.js';
 import { getPlanConfig } from './planConfig.js';
+import { getCurrentPrice, analyzeEarlyBuyers, formatPnLOutput } from './priceAnalyzer.js';
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
@@ -325,11 +326,34 @@ async function analyzeTopHolders(tokenAddress) {
       console.log(fundingOutput);
     }
 
+    // ── PnL & Early Buyer Analysis (mode ≥ 2) ──
+    let pnlOutput = '';
+    if (mode >= 2) {
+      console.log(chalk.cyan('\n💰 Fetching current price from Jupiter...'));
+      const currentPrice = await getCurrentPrice(tokenAddress);
+      if (currentPrice) {
+        console.log(chalk.green(`  ✅ Price: ${currentPrice.priceSOL.toExponential(2)} SOL ($${currentPrice.priceUSD.toExponential(2)})`));
+        const pnlAnalysis = analyzeEarlyBuyers(holders, currentPrice, similarityAnalysis, fundingAnalysis);
+        pnlOutput = formatPnLOutput(pnlAnalysis, holders);
+        console.log(pnlOutput);
+
+        if (pnlAnalysis.earlyBuyers.length > 0) {
+          console.log(chalk.red(`  🏆 Detected ${pnlAnalysis.earlyBuyers.length} early buyer(s) still holding!`));
+        }
+        if (pnlAnalysis.crossReferences.length > 0) {
+          console.log(chalk.red(`  🚨 ${pnlAnalysis.crossReferences.length} cross-reference alert(s) — profitable wallets in suspicious groups!`));
+        }
+      } else {
+        pnlOutput = '\n⚠️  Price data unavailable — PnL analysis skipped.\n';
+        console.log(chalk.yellow(pnlOutput));
+      }
+    }
+
     // Save to file
     const save = await ask(chalk.green('\nSave to file? [y/N] > '));
     if (save.toLowerCase() === 'y') {
       const filename = `holders_${tokenAddress.slice(0, 8)}_${new Date().toISOString().replace(/[:.T]/g, '').slice(0, 15)}.txt`;
-      writeFileSync(filename, output + insiderOutput + fundingOutput, 'utf-8');
+      writeFileSync(filename, output + insiderOutput + fundingOutput + pnlOutput, 'utf-8');
       console.log(chalk.green(`✅ Saved to ${filename}`));
     }
   } catch (err) {

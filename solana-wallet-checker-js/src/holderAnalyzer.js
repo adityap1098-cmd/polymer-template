@@ -19,6 +19,7 @@ import {
   identifyExchange, isLiquidityProgram, isUniversalToken, getEntityLabel,
   KNOWN_PROGRAM_LABELS, SYSTEM_PROGRAM_ID, getProgramLabel, isUserWallet,
 } from './knownEntities.js';
+import { extractEntryPriceFromTx } from './priceAnalyzer.js';
 
 const TOKEN_PROGRAM_ID = 'TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA';
 const TOKEN_2022_PROGRAM_ID = 'TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb';
@@ -457,7 +458,7 @@ export class HolderAnalyzer {
     const topHolders = holders.slice(0, limit);
     console.log(`Analyzing top ${topHolders.length} holders...`);
 
-    // Get purchase time + wallet age + token holdings SEQUENTIALLY
+    // Get purchase time + entry price + wallet age + token holdings SEQUENTIALLY
     for (let i = 0; i < topHolders.length; i++) {
       try {
         const purchaseInfo = await this._getFirstPurchaseTime(topHolders[i].owner, tokenMint);
@@ -465,6 +466,17 @@ export class HolderAnalyzer {
         topHolders[i].purchaseTimeStr = purchaseInfo?.purchaseTime
           ? purchaseInfo.purchaseTime.toISOString().replace('T', ' ').split('.')[0]
           : 'Unknown';
+
+        // Entry price data from purchase transaction
+        if (purchaseInfo?.entryPrice) {
+          topHolders[i].entryPriceSol = purchaseInfo.entryPrice.pricePerToken;
+          topHolders[i].solSpent = purchaseInfo.entryPrice.solSpent;
+          topHolders[i].tokensReceived = purchaseInfo.entryPrice.tokensReceived;
+        } else {
+          topHolders[i].entryPriceSol = null;
+          topHolders[i].solSpent = null;
+          topHolders[i].tokensReceived = null;
+        }
 
         // Wallet age & activity metrics (paginated — finds TRUE oldest tx)
         const walletAge = await this._getWalletAge(topHolders[i].owner);
@@ -484,6 +496,9 @@ export class HolderAnalyzer {
       } catch {
         topHolders[i].purchaseTime = null;
         topHolders[i].purchaseTimeStr = 'Unknown';
+        topHolders[i].entryPriceSol = null;
+        topHolders[i].solSpent = null;
+        topHolders[i].tokensReceived = null;
         topHolders[i].walletAgeDays = null;
         topHolders[i].txFrequency = 0;
         topHolders[i].totalTxCount = 0;
@@ -494,7 +509,9 @@ export class HolderAnalyzer {
       if ((i + 1) % 3 === 0 || i === topHolders.length - 1) {
         const curr = topHolders[i].tokenCount || 0;
         const hist = topHolders[i].historicalTokenCount || 0;
-        console.log(`  Holder info: ${i + 1}/${topHolders.length} | ${topHolders[i].owner.slice(0, 12)}... age=${topHolders[i].walletAgeDays}d tokens=${hist} (${curr} held + ${hist - curr} history)`);
+        const ep = topHolders[i].entryPriceSol;
+        const epStr = ep != null && ep > 0 ? ` entry=${ep.toExponential(2)}SOL` : '';
+        console.log(`  Holder info: ${i + 1}/${topHolders.length} | ${topHolders[i].owner.slice(0, 12)}... age=${topHolders[i].walletAgeDays}d tokens=${hist} (${curr} held + ${hist - curr} history)${epStr}`);
       }
     }
 
@@ -1224,7 +1241,12 @@ export class HolderAnalyzer {
               for (const balance of (tx.meta.postTokenBalances || [])) {
                 if (balance.mint === tokenMint && balance.owner === wallet) {
                   const bt = tx.blockTime;
-                  return { purchaseTime: bt ? new Date(bt * 1000) : new Date() };
+                  // Extract entry price from the purchase transaction
+                  const entryPrice = extractEntryPriceFromTx(tx, wallet, tokenMint);
+                  return {
+                    purchaseTime: bt ? new Date(bt * 1000) : new Date(),
+                    entryPrice,
+                  };
                 }
               }
             }
@@ -1254,7 +1276,12 @@ export class HolderAnalyzer {
 
           for (const balance of (tx.meta.postTokenBalances || [])) {
             if (balance.mint === tokenMint && balance.owner === wallet) {
-              return { purchaseTime: blockTime ? new Date(blockTime * 1000) : new Date() };
+              // Extract entry price from the purchase transaction
+              const entryPrice = extractEntryPriceFromTx(tx, wallet, tokenMint);
+              return {
+                purchaseTime: blockTime ? new Date(blockTime * 1000) : new Date(),
+                entryPrice,
+              };
             }
           }
         } catch { continue; }
@@ -1394,6 +1421,12 @@ export class HolderAnalyzer {
         lines.push(`  ${holder.balance.toLocaleString('en-US', { maximumFractionDigits: 0 })} tokens (${percentage.toFixed(2)}%) | Age: ${age} | Tokens: ${totalTokens} (${heldTokens} held)`);
         if (holder.purchaseTimeStr && holder.purchaseTimeStr !== 'Unknown') {
           lines.push(`  First Buy: ${holder.purchaseTimeStr}`);
+        }
+        if (holder.entryPriceSol != null && holder.entryPriceSol > 0) {
+          const ep = holder.entryPriceSol;
+          const epStr = ep < 0.000001 ? ep.toExponential(2) : ep.toFixed(8);
+          const solStr = holder.solSpent != null ? ` (${holder.solSpent.toFixed(4)} SOL spent)` : '';
+          lines.push(`  Entry Price: ${epStr} SOL/token${solStr}`);
         }
         for (const factor of risk.factors) lines.push(`    → ${factor}`);
       } else {

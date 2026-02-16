@@ -19,6 +19,10 @@ import {
 } from './knownEntities.js';
 import { InsiderDetector } from './insiderDetector.js';
 import { getPlanConfig, PLANS } from './planConfig.js';
+import {
+  extractEntryPriceFromTx, getCurrentPrice, calculateHolderPnL,
+  analyzeEarlyBuyers, formatPnLOutput, SOL_MINT,
+} from './priceAnalyzer.js';
 import { writeFileSync, unlinkSync } from 'fs';
 import { PublicKey } from '@solana/web3.js';
 
@@ -1278,5 +1282,323 @@ describe('checkIsOnCurve - Ed25519 curve check (zero RPC)', () => {
     // Verify the function at least works correctly on edge cases
     assert.equal(typeof checkIsOnCurve('11111111111111111111111111111111'), 'boolean');
     assert.equal(typeof checkIsOnCurve('randomtext'), 'boolean');
+  });
+});
+
+// ============== Price & PnL Analysis Tests ==============
+
+describe('extractEntryPriceFromTx', () => {
+  const MOCK_WALLET = 'BuyerWallet111111111111111111111111111111111';
+  const MOCK_TOKEN = 'TokenMint222222222222222222222222222222222222';
+
+  it('should extract entry price from a typical swap tx', () => {
+    const tx = {
+      transaction: {
+        message: {
+          accountKeys: [MOCK_WALLET, 'OtherAddr1', 'OtherAddr2'],
+        },
+      },
+      meta: {
+        fee: 5000, // 0.000005 SOL
+        preBalances: [2000000000, 500000000, 300000000], // 2 SOL, etc
+        postBalances: [1000000000, 500000000, 300000000], // 1 SOL after buy
+        preTokenBalances: [],
+        postTokenBalances: [
+          {
+            mint: MOCK_TOKEN,
+            owner: MOCK_WALLET,
+            uiTokenAmount: { uiAmountString: '1000000', uiAmount: 1000000, decimals: 6 },
+          },
+        ],
+      },
+    };
+
+    const result = extractEntryPriceFromTx(tx, MOCK_WALLET, MOCK_TOKEN);
+    assert.ok(result, 'Should return entry price data');
+    assert.equal(result.tokensReceived, 1000000);
+    // SOL spent = (2.0 - 1.0) - 0.000005 fee ≈ 0.999995
+    assert.ok(result.solSpent > 0.999 && result.solSpent < 1.001, `SOL spent should be ~1, got ${result.solSpent}`);
+    // Price per token = ~1 SOL / 1000000 tokens = ~0.000001
+    assert.ok(result.pricePerToken > 0, 'Price per token should be positive');
+    assert.ok(result.pricePerToken < 0.00001, `Expected very small price, got ${result.pricePerToken}`);
+  });
+
+  it('should handle pre-existing token balance (additional buy)', () => {
+    const tx = {
+      transaction: {
+        message: {
+          accountKeys: [MOCK_WALLET],
+        },
+      },
+      meta: {
+        fee: 5000,
+        preBalances: [1500000000],
+        postBalances: [500000000],
+        preTokenBalances: [
+          {
+            mint: MOCK_TOKEN,
+            owner: MOCK_WALLET,
+            uiTokenAmount: { uiAmountString: '500000', uiAmount: 500000, decimals: 6 },
+          },
+        ],
+        postTokenBalances: [
+          {
+            mint: MOCK_TOKEN,
+            owner: MOCK_WALLET,
+            uiTokenAmount: { uiAmountString: '1500000', uiAmount: 1500000, decimals: 6 },
+          },
+        ],
+      },
+    };
+
+    const result = extractEntryPriceFromTx(tx, MOCK_WALLET, MOCK_TOKEN);
+    assert.ok(result);
+    assert.equal(result.tokensReceived, 1000000, 'Should detect 1M tokens received (1.5M - 0.5M)');
+    assert.ok(result.solSpent > 0.99, `SOL spent should be ~1, got ${result.solSpent}`);
+  });
+
+  it('should return null for tx without the target token', () => {
+    const tx = {
+      transaction: { message: { accountKeys: [MOCK_WALLET] } },
+      meta: {
+        fee: 5000,
+        preBalances: [1000000000],
+        postBalances: [500000000],
+        preTokenBalances: [],
+        postTokenBalances: [
+          { mint: 'OtherToken333', owner: MOCK_WALLET, uiTokenAmount: { uiAmountString: '100', uiAmount: 100, decimals: 6 } },
+        ],
+      },
+    };
+
+    const result = extractEntryPriceFromTx(tx, MOCK_WALLET, MOCK_TOKEN);
+    assert.equal(result, null, 'Should return null for wrong token');
+  });
+
+  it('should return null for null/undefined tx', () => {
+    assert.equal(extractEntryPriceFromTx(null, MOCK_WALLET, MOCK_TOKEN), null);
+    assert.equal(extractEntryPriceFromTx(undefined, MOCK_WALLET, MOCK_TOKEN), null);
+    assert.equal(extractEntryPriceFromTx({}, MOCK_WALLET, MOCK_TOKEN), null);
+  });
+
+  it('should return null for sell tx (tokens decreased)', () => {
+    const tx = {
+      transaction: { message: { accountKeys: [MOCK_WALLET] } },
+      meta: {
+        fee: 5000,
+        preBalances: [500000000],
+        postBalances: [1500000000],
+        preTokenBalances: [
+          { mint: MOCK_TOKEN, owner: MOCK_WALLET, uiTokenAmount: { uiAmountString: '1000000', decimals: 6 } },
+        ],
+        postTokenBalances: [
+          { mint: MOCK_TOKEN, owner: MOCK_WALLET, uiTokenAmount: { uiAmountString: '500000', decimals: 6 } },
+        ],
+      },
+    };
+
+    const result = extractEntryPriceFromTx(tx, MOCK_WALLET, MOCK_TOKEN);
+    assert.equal(result, null, 'Should return null for sell tx (tokens decreased)');
+  });
+
+  it('should handle accountKeys as objects with pubkey field', () => {
+    const tx = {
+      transaction: {
+        message: {
+          accountKeys: [{ pubkey: MOCK_WALLET }, { pubkey: 'Other' }],
+        },
+      },
+      meta: {
+        fee: 5000,
+        preBalances: [2000000000, 500000000],
+        postBalances: [1000000000, 500000000],
+        preTokenBalances: [],
+        postTokenBalances: [
+          { mint: MOCK_TOKEN, owner: MOCK_WALLET, uiTokenAmount: { uiAmountString: '1000', decimals: 6 } },
+        ],
+      },
+    };
+
+    const result = extractEntryPriceFromTx(tx, MOCK_WALLET, MOCK_TOKEN);
+    assert.ok(result, 'Should work with accountKeys as objects');
+    assert.ok(result.tokensReceived === 1000);
+  });
+});
+
+describe('calculateHolderPnL', () => {
+  it('should calculate PnL correctly for profitable holder', () => {
+    const holder = { balance: 1000000, entryPriceSol: 0.000001 };
+    const currentPrice = { priceSOL: 0.00001, priceUSD: 0.001, solPriceUSD: 100 };
+
+    const pnl = calculateHolderPnL(holder, currentPrice);
+    assert.ok(pnl, 'Should return PnL data');
+    assert.equal(pnl.entryPriceSOL, 0.000001);
+    assert.equal(pnl.currentPriceSOL, 0.00001);
+
+    // Cost basis = 0.000001 * 1000000 = 1 SOL
+    assert.ok(Math.abs(pnl.costBasisSOL - 1) < 0.0001, `Cost basis should be 1 SOL, got ${pnl.costBasisSOL}`);
+    // Current value = 0.00001 * 1000000 = 10 SOL
+    assert.ok(Math.abs(pnl.currentValueSOL - 10) < 0.0001, `Current value should be 10 SOL, got ${pnl.currentValueSOL}`);
+    // PnL = 10 - 1 = 9 SOL
+    assert.ok(Math.abs(pnl.pnlSOL - 9) < 0.0001, `PnL should be 9 SOL, got ${pnl.pnlSOL}`);
+    // PnL% = (10/1 - 1) * 100 = 900%
+    assert.ok(Math.abs(pnl.pnlPercent - 900) < 0.1, `PnL% should be 900%, got ${pnl.pnlPercent}`);
+    // Multiplier = 10x
+    assert.ok(Math.abs(pnl.multiplier - 10) < 0.01, `Multiplier should be 10x, got ${pnl.multiplier}`);
+  });
+
+  it('should calculate PnL for losing holder', () => {
+    const holder = { balance: 1000, entryPriceSol: 0.01 };
+    const currentPrice = { priceSOL: 0.001, priceUSD: 0.1, solPriceUSD: 100 };
+
+    const pnl = calculateHolderPnL(holder, currentPrice);
+    assert.ok(pnl);
+    assert.ok(pnl.pnlSOL < 0, 'PnL should be negative');
+    assert.ok(pnl.pnlPercent < 0, 'PnL% should be negative');
+    assert.ok(pnl.multiplier < 1, 'Multiplier should be < 1 (loss)');
+  });
+
+  it('should return null if no entry price', () => {
+    const holder = { balance: 1000, entryPriceSol: null };
+    const currentPrice = { priceSOL: 0.001, priceUSD: 0.1, solPriceUSD: 100 };
+    assert.equal(calculateHolderPnL(holder, currentPrice), null);
+  });
+
+  it('should return null if no current price', () => {
+    const holder = { balance: 1000, entryPriceSol: 0.001 };
+    assert.equal(calculateHolderPnL(holder, null), null);
+  });
+
+  it('should calculate USD values correctly', () => {
+    const holder = { balance: 100000, entryPriceSol: 0.0001 };
+    const currentPrice = { priceSOL: 0.001, priceUSD: 0.1, solPriceUSD: 100 };
+
+    const pnl = calculateHolderPnL(holder, currentPrice);
+    assert.ok(pnl);
+    // Cost basis USD = 0.0001 * 100000 * 100 = $1000
+    assert.ok(Math.abs(pnl.costBasisUSD - 1000) < 1, `Cost basis USD should be ~$1000, got ${pnl.costBasisUSD}`);
+    // Current value USD = 0.001 * 100000 * 100 = $10000
+    assert.ok(Math.abs(pnl.currentValueUSD - 10000) < 1, `Current value USD should be ~$10000, got ${pnl.currentValueUSD}`);
+  });
+});
+
+describe('analyzeEarlyBuyers', () => {
+  const currentPrice = { priceSOL: 0.00001, priceUSD: 0.001, solPriceUSD: 100 };
+
+  it('should identify early buyers (5x+ profit, ≥0.5% supply)', () => {
+    const holders = [
+      { owner: 'EarlyBuyer1111', balance: 5000, entryPriceSol: 0.000001 }, // 10x = early buyer, 50% supply
+      { owner: 'LateBuyer22222', balance: 5000, entryPriceSol: 0.000008 }, // 1.25x = not early
+    ];
+
+    const result = analyzeEarlyBuyers(holders, currentPrice);
+    assert.ok(result.earlyBuyers.length >= 1, 'Should detect at least 1 early buyer');
+    assert.equal(result.earlyBuyers[0].owner, 'EarlyBuyer1111');
+  });
+
+  it('should sort top PnL by profit percentage descending', () => {
+    const holders = [
+      { owner: 'WalletA', balance: 1000, entryPriceSol: 0.000005 }, // 2x
+      { owner: 'WalletB', balance: 1000, entryPriceSol: 0.000001 }, // 10x
+      { owner: 'WalletC', balance: 1000, entryPriceSol: 0.000008 }, // 1.25x
+    ];
+
+    const result = analyzeEarlyBuyers(holders, currentPrice);
+    assert.ok(result.topPnL.length === 3);
+    assert.equal(result.topPnL[0].owner, 'WalletB', 'Highest PnL% should be first');
+  });
+
+  it('should detect cross-references with sybil clusters', () => {
+    const holders = [
+      { owner: 'Insider1', balance: 5000, entryPriceSol: 0.000001 }, // 10x profit
+      { owner: 'Insider2', balance: 5000, entryPriceSol: 0.000002 }, // 5x profit
+      { owner: 'Normal11', balance: 5000, entryPriceSol: 0.00001 },  // break-even
+    ];
+
+    const fundingAnalysis = {
+      clusters: [
+        { wallets: ['Insider1', 'Insider2'], walletCount: 2, type: 'COMMON_FUNDER', funder: 'Funder1' },
+      ],
+      sniperPatterns: [],
+    };
+
+    const result = analyzeEarlyBuyers(holders, currentPrice, null, fundingAnalysis);
+    assert.ok(result.crossReferences.length >= 1, 'Should detect cross-reference: profitable wallets in sybil cluster');
+    assert.equal(result.crossReferences[0].type, 'SYBIL_CLUSTER');
+  });
+
+  it('should detect cross-references with similarity groups', () => {
+    const holders = [
+      { owner: 'SimA', balance: 5000, entryPriceSol: 0.000001 },
+      { owner: 'SimB', balance: 5000, entryPriceSol: 0.0000015 },
+    ];
+
+    const similarityAnalysis = {
+      groups: [
+        { wallets: ['SimA', 'SimB'], walletCount: 2, avgJaccard: 0.35 },
+      ],
+    };
+
+    const result = analyzeEarlyBuyers(holders, currentPrice, similarityAnalysis, null);
+    assert.ok(result.crossReferences.length >= 1, 'Should crossref profitable holders in similarity group');
+    assert.equal(result.crossReferences[0].type, 'SIMILARITY_GROUP');
+  });
+
+  it('should handle null current price gracefully', () => {
+    const holders = [{ owner: 'W1', balance: 1000, entryPriceSol: 0.001 }];
+    const result = analyzeEarlyBuyers(holders, null);
+    assert.equal(result.earlyBuyers.length, 0);
+    assert.equal(result.currentPrice, null);
+  });
+});
+
+describe('formatPnLOutput', () => {
+  it('should format output with early buyers and cross-references', () => {
+    const holders = [
+      { owner: 'EarlyA', balance: 5000, entryPriceSol: 0.000001 },
+      { owner: 'EarlyB', balance: 3000, entryPriceSol: 0.000002 },
+      { owner: 'LateC1', balance: 2000, entryPriceSol: 0.00001 },
+    ];
+    const currentPrice = { priceSOL: 0.00001, priceUSD: 0.001, solPriceUSD: 100 };
+    const pnlAnalysis = analyzeEarlyBuyers(holders, currentPrice, null, null);
+    const output = formatPnLOutput(pnlAnalysis, holders);
+
+    assert.ok(output.includes('ENTRY PRICE & PnL ANALYSIS'), 'Should have PnL header');
+    assert.ok(output.includes('Current Price'), 'Should show current price');
+    assert.ok(output.includes('Ringkasan'), 'Should have summary');
+  });
+
+  it('should show unavailable message when no price data', () => {
+    const output = formatPnLOutput(null, []);
+    assert.ok(output.includes('unavailable') || output.includes('skipped'), 'Should indicate price unavailable');
+  });
+
+  it('should show unavailable message when currentPrice is null', () => {
+    const pnlAnalysis = { currentPrice: null, earlyBuyers: [], topPnL: [], crossReferences: [], totalAnalyzed: 0, totalHolders: 0 };
+    const output = formatPnLOutput(pnlAnalysis, []);
+    assert.ok(output.includes('unavailable') || output.includes('skipped'));
+  });
+
+  it('should contain cross-reference alerts when present', () => {
+    const holders = [
+      { owner: 'Insider1', balance: 5000, entryPriceSol: 0.000001 },
+      { owner: 'Insider2', balance: 5000, entryPriceSol: 0.000002 },
+    ];
+    const currentPrice = { priceSOL: 0.00001, priceUSD: 0.001, solPriceUSD: 100 };
+    const fundingAnalysis = {
+      clusters: [{ wallets: ['Insider1', 'Insider2'], walletCount: 2, type: 'COMMON_FUNDER' }],
+      sniperPatterns: [],
+    };
+    const pnlAnalysis = analyzeEarlyBuyers(holders, currentPrice, null, fundingAnalysis);
+    const output = formatPnLOutput(pnlAnalysis, holders);
+
+    assert.ok(output.includes('CROSS-REFERENCE'), 'Should show cross-reference section');
+    assert.ok(output.includes('SYBIL_CLUSTER'), 'Should mention sybil cluster');
+  });
+});
+
+describe('SOL_MINT constant', () => {
+  it('should be the correct wrapped SOL mint', () => {
+    assert.equal(SOL_MINT, 'So11111111111111111111111111111111111111112');
   });
 });
