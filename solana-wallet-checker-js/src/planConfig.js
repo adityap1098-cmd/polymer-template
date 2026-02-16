@@ -5,11 +5,16 @@
  *   free  → 15 req/s, conservative scanning
  *   paid  → 50 req/s, deep scanning (Build plan $42/mo, 80M credits)
  *
- * Paid plan unlocks enhanced QuickNode APIs:
- *   - getMultipleAccounts (batch account lookups)
+ * DAS API features available on both plans:
+ *   - getTokenAccounts (paginated holder scan — replaces getProgramAccounts!)
+ *   - getAssetsByOwner (richer token/NFT data)
+ *   - getAsset / getAssets (token metadata + decimals)
  *   - getTransactionsForAddress (single-call tx fetch, eliminates N+1)
- *   - getAssetsByOwner (DAS — richer token/NFT data)
+ *   - getMultipleAccounts (batch account lookups)
+ *
+ * Paid-only features:
  *   - sns_getAllDomainsForOwner (.sol domain detection)
+ *   - getProgramAccounts (direct program account scan)
  *
  * All parameters are tuned for each plan to maximize accuracy
  * while staying within API limits.
@@ -17,9 +22,9 @@
 
 const PLANS = {
   free: {
-    name: 'Free',
+    name: 'Discover',
     maxRps: 12,              // 80% of 15 req/s limit
-    topHolders: 20,          // Solana API returns ~20 max anyway
+    topHolders: 200,         // DAS getTokenAccounts unlocks ALL holders — analyze top 200
     txHistoryPerWallet: 50,  // tx to scan for token history
     walletAgePages: 3,       // 3 × 1000 = 3000 tx for age
     fundingHops: 2,          // 2-hop funding chain
@@ -27,16 +32,17 @@ const PLANS = {
     tokenHistoryEarlyStop: 50,  // stop after finding 50 unique tokens
     purchaseTimeScanLimit: 1000, // sigs to scan for first purchase
 
-    // Enhanced API features on Discover plan
+    // DAS API features on Discover plan
     useBatchAccounts: true,  // getMultipleAccounts works on Discover (max 5/call)
     batchAccountsLimit: 5,   // Discover plan: max 5 accounts per getMultipleAccounts call
     useEnhancedTx: true,     // ✅ getTransactionsForAddress works on Discover
     useDAS: true,            // ✅ DAS getAssetsByOwner works on Discover
+    useDASTokenAccounts: true, // ✅ DAS getTokenAccounts — paginated ALL holders (replaces getProgramAccounts!)
     useSNS: false,           // ❌ SNS add-on NOT installed — Method not found
     useProgramAccounts: false, // ❌ getProgramAccounts timeout/disabled on Discover
     detectProgramOwned: true,  // PDA detection via getMultipleAccounts (5/call is enough)
 
-    description: 'QuickNode Discover — 15 req/s, 50K credits/day (no SNS, no getProgramAccounts)',
+    description: 'QuickNode Discover — 15 req/s, DAS getTokenAccounts for full holder scan',
   },
   paid: {
     name: 'Build ($42/mo)',
@@ -54,11 +60,12 @@ const PLANS = {
     batchAccountsLimit: 100, // Build plan: max 100 accounts per getMultipleAccounts call
     useEnhancedTx: true,     // getTransactionsForAddress — eliminates N+1 pattern (~50× fewer calls)
     useDAS: true,            // DAS getAssetsByOwner — complete token/NFT profile
+    useDASTokenAccounts: true, // DAS getTokenAccounts — paginated ALL holders (preferred over getProgramAccounts)
     useSNS: true,            // SNS .sol domain detection — identity signal for risk scoring
-    useProgramAccounts: true, // getProgramAccounts — fetch ALL holder accounts (200+), not just top 20
+    useProgramAccounts: true, // getProgramAccounts — fallback if DAS getTokenAccounts unavailable
     detectProgramOwned: true, // Check wallet .owner field — catches ALL DEX/Pump.fun PDAs dynamically
 
-    description: 'QuickNode Build — 50 req/s, 80M credits/mo',
+    description: 'QuickNode Build — 50 req/s, 80M credits/mo, full DAS + SNS',
   },
 };
 

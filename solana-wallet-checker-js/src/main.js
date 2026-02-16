@@ -125,6 +125,7 @@ function printBanner() {
   if (plan.useBatchAccounts) enhancedApis.push('BatchAccounts');
   if (plan.useEnhancedTx) enhancedApis.push('EnhancedTx');
   if (plan.useDAS) enhancedApis.push('DAS');
+  if (plan.useDASTokenAccounts) enhancedApis.push('DAS-TokenAccounts');
   if (plan.useSNS) enhancedApis.push('SNS');
   if (plan.useProgramAccounts) enhancedApis.push('ProgramAccounts');
   if (plan.detectProgramOwned) enhancedApis.push('PDA-Detect');

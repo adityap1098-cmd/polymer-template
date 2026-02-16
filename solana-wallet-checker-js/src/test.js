@@ -888,7 +888,7 @@ describe('PlanConfig', () => {
     assert.equal(free.interHolderTxScan, 10);
     assert.equal(free.tokenHistoryEarlyStop, 50);
     assert.equal(free.purchaseTimeScanLimit, 1000);
-    assert.equal(free.topHolders, 20);
+    assert.equal(free.topHolders, 200);  // DAS getTokenAccounts unlocks ALL holders on Discover too
   });
 
   it('paid plan should have deeper scanning', () => {
@@ -924,7 +924,7 @@ describe('PlanConfig', () => {
 
     // Default should be free plan
     assert.equal(config.maxRps, 12);
-    assert.equal(config.name, 'Free');
+    assert.equal(config.name, 'Discover');
 
     if (oldPlan !== undefined) process.env.QUICKNODE_PLAN = oldPlan;
   });
@@ -969,6 +969,7 @@ describe('PlanConfig', () => {
     assert.equal(PLANS.paid.useBatchAccounts, true);
     assert.equal(PLANS.paid.useEnhancedTx, true);
     assert.equal(PLANS.paid.useDAS, true);
+    assert.equal(PLANS.paid.useDASTokenAccounts, true);
     assert.equal(PLANS.paid.useSNS, true);
     assert.equal(PLANS.paid.useProgramAccounts, true);
     assert.equal(PLANS.paid.detectProgramOwned, true);
@@ -980,15 +981,18 @@ describe('PlanConfig', () => {
     assert.equal(PLANS.free.useBatchAccounts, true);
     assert.equal(PLANS.free.detectProgramOwned, true);
     assert.equal(PLANS.free.batchAccountsLimit, 5);
-    // Discover: enhanced Tx & DAS work, but SNS and getProgramAccounts do NOT
+    // Discover: enhanced Tx, DAS, and DAS getTokenAccounts work
     assert.equal(PLANS.free.useEnhancedTx, true);
     assert.equal(PLANS.free.useDAS, true);
+    assert.equal(PLANS.free.useDASTokenAccounts, true);
+    // SNS and getProgramAccounts do NOT work on Discover
     assert.equal(PLANS.free.useSNS, false);
     assert.equal(PLANS.free.useProgramAccounts, false);
   });
 
-  it('paid plan topHolders should be 200 (getProgramAccounts unlocked)', () => {
+  it('both plans topHolders should be 200 (DAS getTokenAccounts unlocks all holders)', () => {
     assert.equal(PLANS.paid.topHolders, 200);
+    assert.equal(PLANS.free.topHolders, 200);
   });
 });
 
@@ -1001,6 +1005,7 @@ describe('HolderAnalyzer - Enhanced Config', () => {
       useBatchAccounts: true,
       useEnhancedTx: true,
       useDAS: true,
+      useDASTokenAccounts: true,
       useSNS: true,
       useProgramAccounts: true,
       detectProgramOwned: true,
@@ -1008,6 +1013,7 @@ describe('HolderAnalyzer - Enhanced Config', () => {
     assert.equal(analyzer.config.useBatchAccounts, true);
     assert.equal(analyzer.config.useEnhancedTx, true);
     assert.equal(analyzer.config.useDAS, true);
+    assert.equal(analyzer.config.useDASTokenAccounts, true);
     assert.equal(analyzer.config.useSNS, true);
     assert.equal(analyzer.config.useProgramAccounts, true);
     assert.equal(analyzer.config.detectProgramOwned, true);
@@ -1018,6 +1024,7 @@ describe('HolderAnalyzer - Enhanced Config', () => {
     assert.equal(analyzer.config.useBatchAccounts, false);
     assert.equal(analyzer.config.useEnhancedTx, false);
     assert.equal(analyzer.config.useDAS, false);
+    assert.equal(analyzer.config.useDASTokenAccounts, false);
     assert.equal(analyzer.config.useSNS, false);
   });
 

@@ -97,6 +97,7 @@ export class HolderAnalyzer {
       useBatchAccounts: config.useBatchAccounts || false,
       useEnhancedTx: config.useEnhancedTx || false,
       useDAS: config.useDAS || false,
+      useDASTokenAccounts: config.useDASTokenAccounts || false,
       useSNS: config.useSNS || false,
       useProgramAccounts: config.useProgramAccounts || false,
       detectProgramOwned: config.detectProgramOwned || false,
@@ -120,11 +121,73 @@ export class HolderAnalyzer {
 
     // ═══════════════════════════════════════════════════════════════════
     // PHASE 1: Get ALL token accounts
-    //   Paid: getProgramAccounts → ALL holders (200+), sorted by balance
-    //   Free: getTokenLargestAccounts → top ~20
+    //   Priority 1: DAS getTokenAccounts → ALL holders, paginated (works on Discover)
+    //   Priority 2: getProgramAccounts → ALL holders (Build plan only)
+    //   Fallback:   getTokenLargestAccounts → top ~20
     // ═══════════════════════════════════════════════════════════════════
 
-    if (this.config.useProgramAccounts) {
+    // ── DAS: getTokenAccounts (paginated, works on Discover/free plan) ──
+    if (this.config.useDASTokenAccounts && rawAccounts.length === 0) {
+      console.log('  ⚡ Using DAS getTokenAccounts (paginated holder scan)');
+      try {
+        // First, get token decimals via DAS getAsset
+        let tokenDecimals = 0;
+        try {
+          const assetInfo = await this.rpc.call('getAsset', [{
+            id: tokenMint,
+            displayOptions: { showFungible: true },
+          }]);
+          tokenDecimals = assetInfo?.token_info?.decimals || 0;
+        } catch { /* will use 0 decimals */ }
+
+        // Paginate through ALL token accounts (1000 per page)
+        const MAX_PAGES = 10; // 10 × 1000 = 10,000 max holders
+        let page = 1;
+        let hasMore = true;
+
+        while (hasMore && page <= MAX_PAGES) {
+          const result = await this.rpc.call('getTokenAccounts', [{
+            mintAddress: tokenMint,
+            page,
+            limit: 1000,
+          }]);
+
+          const accounts = result?.token_accounts;
+          if (!accounts || !Array.isArray(accounts) || accounts.length === 0) break;
+
+          for (const acct of accounts) {
+            if (!acct.owner) continue;
+            const amount = parseFloat(acct.amount || '0');
+            if (amount <= 0) continue;
+            rawAccounts.push({
+              tokenAccount: acct.address,
+              owner: acct.owner,
+              balance: amount,
+              decimals: tokenDecimals,
+            });
+          }
+
+          // Check if more pages
+          if (accounts.length < 1000) {
+            hasMore = false;
+          } else {
+            page++;
+          }
+        }
+
+        if (rawAccounts.length > 0) {
+          // Sort by balance descending
+          rawAccounts.sort((a, b) => b.balance - a.balance);
+          console.log(`  📊 DAS getTokenAccounts returned ${rawAccounts.length} holders (${page} pages)`);
+        }
+      } catch (err) {
+        console.log(`  ⚠️ DAS getTokenAccounts failed (${err.message}), trying next method`);
+        rawAccounts = [];
+      }
+    }
+
+    // ── getProgramAccounts (Build/paid plan only) ──
+    if (this.config.useProgramAccounts && rawAccounts.length === 0) {
       console.log('  ⚡ Using getProgramAccounts (full holder scan, paid plan)');
       try {
         // Fetch ALL token accounts for this mint using getProgramAccounts
