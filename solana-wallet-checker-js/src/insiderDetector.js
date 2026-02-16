@@ -582,18 +582,12 @@ export class InsiderDetector {
         .filter(x => x.holder)
         .sort((a, b) => b.holder.balance - a.holder.balance);
 
-      const showCount = Math.min(5, sortedMembers.length);
-      for (let mi = 0; mi < showCount; mi++) {
+      for (let mi = 0; mi < sortedMembers.length; mi++) {
         const { wallet, holder: h } = sortedMembers[mi];
         const pct = h && effectiveSupply > 0 ? (h.balance / effectiveSupply * 100) : 0;
         const age = h?.walletAgeDays != null ? `${h.walletAgeDays}d` : '?';
         const score = h?.riskData?.score ?? '?';
         lines.push(`  │  ${bc(pct)} ${fmtPct(pct).padEnd(7)} ${sh(wallet)}  Age:${age.padEnd(5)} Risk:${score}`);
-      }
-      if (sortedMembers.length > 5) {
-        const restBal = sortedMembers.slice(5).reduce((s, x) => s + (x.holder?.balance || 0), 0);
-        const restPct = effectiveSupply > 0 ? (restBal / effectiveSupply * 100) : 0;
-        lines.push(`  │  ... +${sortedMembers.length - 5} wallets (${fmtPct(restPct)})`);
       }
 
       // Funders (compact)
