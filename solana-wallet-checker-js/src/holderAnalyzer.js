@@ -465,10 +465,14 @@ export class HolderAnalyzer {
         const jaccard = jaccardSimilarity(tokens1, tokens2);
         const commonTokens = new Set([...tokens1].filter(t => tokens2.has(t)));
 
-        // Dual threshold: proportional (Jaccard) OR absolute (raw count)
-        // Jaccard ≥ 0.10 with 3+ common = proportional overlap
-        // 5+ common tokens = always notable (even with large portfolios)
-        if ((jaccard >= 0.10 && commonTokens.size >= 3) || commonTokens.size >= 5) {
+        // Smart threshold: proportional overlap required
+        // Jaccard ≥ 0.08 with 3+ common = significant proportional overlap
+        // For large portfolios: raw count ≥ 8 AND ≥ 5% of smaller portfolio
+        const minPortfolio = Math.min(tokens1.size, tokens2.size);
+        const commonPct = minPortfolio > 0 ? commonTokens.size / minPortfolio : 0;
+        const passesJaccard = jaccard >= 0.08 && commonTokens.size >= 3;
+        const passesRawCount = commonTokens.size >= 8 && commonPct >= 0.05;
+        if (passesJaccard || passesRawCount) {
           const key = [holders[i].owner, holders[j].owner].sort().join('|');
           similarities.set(key, {
             wallets: [holders[i].owner, holders[j].owner],

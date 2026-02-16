@@ -279,9 +279,12 @@ export class InsiderDetector {
       // Token overlap (0-35pts) — strongest insider signal
       if (groupEvidence.tokenOverlap) {
         const j = groupEvidence.avgJaccard;
-        if (j >= 0.7) { confidence += 35; signals.push(`🔴 Token overlap sangat tinggi (J=${j.toFixed(2)}) — 35pts`); }
-        else if (j >= 0.4) { confidence += 25; signals.push(`🟠 Token overlap tinggi (J=${j.toFixed(2)}) — 25pts`); }
-        else if (j >= 0.15) { confidence += 15; signals.push(`🟡 Token overlap moderate (J=${j.toFixed(2)}) — 15pts`); }
+        const sc = groupEvidence.sharedTokens.size;
+        if (j >= 0.7) { confidence += 35; signals.push(`🔴 Token overlap sangat tinggi (J=${j.toFixed(2)}, ${sc} shared) — 35pts`); }
+        else if (j >= 0.4) { confidence += 25; signals.push(`🟠 Token overlap tinggi (J=${j.toFixed(2)}, ${sc} shared) — 25pts`); }
+        else if (j >= 0.15) { confidence += 15; signals.push(`🟡 Token overlap moderate (J=${j.toFixed(2)}, ${sc} shared) — 15pts`); }
+        else if (j >= 0.08) { confidence += 10; signals.push(`🟡 Token overlap low-moderate (J=${j.toFixed(2)}, ${sc} shared) — 10pts`); }
+        // j < 0.08 = noise, no points
       }
 
       // Shared funder (0-25pts)
@@ -325,6 +328,9 @@ export class InsiderDetector {
       else if (confidence >= 45) confidenceLabel = '🟠 KEMUNGKINAN BESAR INSIDER';
       else if (confidence >= 25) confidenceLabel = '🟡 DICURIGAI TERKAIT';
       else confidenceLabel = '⚪ KONEKSI LEMAH';
+
+      // Filter out noise — groups with confidence < 10 are random coincidence
+      if (confidence < 10) continue;
 
       insiderGroups.push({
         wallets: walletList,
@@ -399,7 +405,7 @@ export class InsiderDetector {
         const h = holderMap.get(wallet);
         const pct = h && totalBalance > 0 ? (h.balance / totalBalance * 100).toFixed(1) : '?';
         const age = h?.walletAgeDays != null ? `${h.walletAgeDays}d` : '?';
-        const tokens = h?.tokenCount ?? '?';
+        const tokens = h?.historicalTokenCount || h?.tokenCount || (h?.tradedTokens?.size ?? '?');
         const score = h?.riskData?.score ?? '?';
         lines.push(`  │   ${wallet}  ${pct}% | Age:${age} | Tok:${tokens} | Risk:${score}`);
       }

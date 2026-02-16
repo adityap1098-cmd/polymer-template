@@ -589,40 +589,64 @@ describe('Jaccard excludes universal tokens', () => {
 
 // ─── Jaccard Threshold Tests ────────────────────────────────────────────────
 
-describe('Jaccard dual threshold', () => {
-  it('should match with Jaccard >= 0.10 AND 3+ common tokens', () => {
-    // 20 tokens each, 4 shared → J = 4/(20+20-4)=4/36≈0.111 >= 0.10 ✓, count=4 >= 3 ✓
+describe('Jaccard smart threshold', () => {
+  it('should match with Jaccard >= 0.08 AND 3+ common tokens', () => {
+    // 20 tokens each, 4 shared → J = 4/(20+20-4)=4/36≈0.111 >= 0.08 ✓, count=4 >= 3 ✓
     const shared = ['T1', 'T2', 'T3', 'T4'];
     const a = new Set([...shared, ...Array.from({ length: 16 }, (_, i) => `A${i}`)]);
     const b = new Set([...shared, ...Array.from({ length: 16 }, (_, i) => `B${i}`)]);
     const j = jaccardSimilarity(a, b);
     const common = [...a].filter(t => b.has(t));
-    assert.ok(j >= 0.10, `Jaccard ${j} should be >= 0.10`);
-    assert.ok(common.length >= 3, `Common count ${common.length} should be >= 3`);
+    const minSize = Math.min(a.size, b.size);
+    const commonPct = common.length / minSize;
+    const passesJaccard = j >= 0.08 && common.length >= 3;
+    const passesRaw = common.length >= 8 && commonPct >= 0.05;
+    assert.ok(passesJaccard || passesRaw, `Should match Jaccard threshold: J=${j}, common=${common.length}`);
   });
 
-  it('should match with 5+ common tokens even if Jaccard < 0.10', () => {
-    // Large portfolios: 100 each, 6 shared → J = 6/194 ≈ 0.031 < 0.10, but count=6 >= 5
+  it('should match large portfolios with 8+ common AND 5%+ overlap', () => {
+    // 100 each, 10 shared → J=10/190≈0.053, count=10≥8, pct=10/100=10%≥5%
+    const shared = Array.from({ length: 10 }, (_, i) => `T${i}`);
+    const a = new Set([...shared, ...Array.from({ length: 90 }, (_, i) => `A${i}`)]);
+    const b = new Set([...shared, ...Array.from({ length: 90 }, (_, i) => `B${i}`)]);
+    const j = jaccardSimilarity(a, b);
+    const common = [...a].filter(t => b.has(t));
+    const minSize = Math.min(a.size, b.size);
+    const commonPct = common.length / minSize;
+    assert.ok(common.length >= 8, `Common count ${common.length} should be >= 8`);
+    assert.ok(commonPct >= 0.05, `Common % ${commonPct} should be >= 5%`);
+    assert.ok(j < 0.08, `Jaccard ${j} < 0.08 (large portfolio dilution)`);
+    // Should still match via raw count threshold
+    const passesRaw = common.length >= 8 && commonPct >= 0.05;
+    assert.ok(passesRaw, 'Raw count threshold should catch this');
+  });
+
+  it('should NOT match 6 common out of 200 (low % overlap)', () => {
+    // 200 each, 6 shared → J=6/394≈0.015, count=6<8 ✗, pct=6/200=3%<5% ✗
     const shared = ['T1', 'T2', 'T3', 'T4', 'T5', 'T6'];
-    const a = new Set([...shared, ...Array.from({ length: 94 }, (_, i) => `A${i}`)]);
-    const b = new Set([...shared, ...Array.from({ length: 94 }, (_, i) => `B${i}`)]);
+    const a = new Set([...shared, ...Array.from({ length: 194 }, (_, i) => `A${i}`)]);
+    const b = new Set([...shared, ...Array.from({ length: 194 }, (_, i) => `B${i}`)]);
     const j = jaccardSimilarity(a, b);
     const common = [...a].filter(t => b.has(t));
-    assert.ok(j < 0.10, `Jaccard ${j} should be < 0.10 (large portfolios)`);
-    assert.ok(common.length >= 5, `Common count ${common.length} should be >= 5`);
-    // This pair should STILL be flagged by the raw count criterion
-    assert.ok((j >= 0.10 && common.length >= 3) || common.length >= 5, 'Dual threshold should catch this');
+    const minSize = Math.min(a.size, b.size);
+    const commonPct = common.length / minSize;
+    const passesJaccard = j >= 0.08 && common.length >= 3;
+    const passesRaw = common.length >= 8 && commonPct >= 0.05;
+    assert.ok(!passesJaccard && !passesRaw, 'Should reject: low overlap is random coincidence');
   });
 
-  it('should NOT match with Jaccard < 0.10 AND < 5 common tokens', () => {
-    // 80 each, 3 shared → J = 3/157 ≈ 0.019 < 0.10, count=3 < 5
-    const shared = ['T1', 'T2', 'T3'];
-    const a = new Set([...shared, ...Array.from({ length: 77 }, (_, i) => `A${i}`)]);
-    const b = new Set([...shared, ...Array.from({ length: 77 }, (_, i) => `B${i}`)]);
+  it('should NOT match 5 common out of 100 (below raw threshold)', () => {
+    // 100 each, 5 shared → J=5/195≈0.026<0.08, count=5<8 ✗
+    const shared = ['T1', 'T2', 'T3', 'T4', 'T5'];
+    const a = new Set([...shared, ...Array.from({ length: 95 }, (_, i) => `A${i}`)]);
+    const b = new Set([...shared, ...Array.from({ length: 95 }, (_, i) => `B${i}`)]);
     const j = jaccardSimilarity(a, b);
     const common = [...a].filter(t => b.has(t));
-    const passes = (j >= 0.10 && common.length >= 3) || common.length >= 5;
-    assert.ok(!passes, 'Dual threshold should reject low overlap in large portfolios');
+    const minSize = Math.min(a.size, b.size);
+    const commonPct = common.length / minSize;
+    const passesJaccard = j >= 0.08 && common.length >= 3;
+    const passesRaw = common.length >= 8 && commonPct >= 0.05;
+    assert.ok(!passesJaccard && !passesRaw, 'Should reject: 5 out of 100 is noise');
   });
 });
 
@@ -716,6 +740,25 @@ describe('InsiderDetector - detectInsiderGroups', () => {
     const groups = detector.detectInsiderGroups(holders, similarity, funding, transfers);
     assert.ok(groups[0].confidence >= 70, `Strong insider group should have confidence >=70, got ${groups[0].confidence}`);
     assert.ok(groups[0].confidenceLabel.includes('SANGAT MUNGKIN'));
+  });
+
+  it('should filter out groups with confidence < 10 (noise)', () => {
+    const detector = new InsiderDetector(TEST_RPC);
+    // Only evidence: group size of 5 = 5pts < 10 threshold
+    const holders = [
+      { owner: 'W1', balance: 100, walletAgeDays: 50, tokenCount: 10 },
+      { owner: 'W2', balance: 100, walletAgeDays: 50, tokenCount: 10 },
+      { owner: 'W3', balance: 100, walletAgeDays: 50, tokenCount: 10 },
+      { owner: 'W4', balance: 100, walletAgeDays: 50, tokenCount: 10 },
+      { owner: 'W5', balance: 100, walletAgeDays: 50, tokenCount: 10 },
+    ];
+    // Create similarity group with very low Jaccard (below scoring threshold)
+    const similarity = {
+      groups: [{ wallets: ['W1', 'W2', 'W3', 'W4', 'W5'], avgJaccard: 0.01, commonTokens: ['t1', 't2', 't3', 't4', 't5'], commonTokenCount: 5, walletCount: 5 }],
+      timingClusters: [],
+    };
+    const groups = detector.detectInsiderGroups(holders, similarity, { clusters: [] }, []);
+    assert.equal(groups.length, 0, 'Groups with confidence < 10 should be filtered out as noise');
   });
 });
 

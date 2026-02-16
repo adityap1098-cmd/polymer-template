@@ -1,0 +1,202 @@
+
+╔══════════════════════════════════════════════════════════════════════════════╗
+║  TOKEN HOLDER RISK ANALYSIS                                                  ║
+╚══════════════════════════════════════════════════════════════════════════════╝
+  Token:  HEZf4cfw13K2p6xnrdcML9BbDbnpmd41KogvWjidLUnK
+  Date:   2026-02-16 03:14:54 UTC
+
+┌──────────────────────────────────────────────────────────────────────────────┐
+│  ⚡ QUICK VERDICT                                                            │
+├──────────────────────────────────────────────────────────────────────────────┤
+│  Overall:   🟢 LOW RISK (28/100)
+│  Holders:   20 analyzed
+│  Gini:      0.382 — well distributed
+│  Top 5:     52.04% of supply
+│  Fresh:     7/20 wallets ≤7 days old (35%)
+│  Similar:   1 group(s) — 12 wallets share trading patterns (46.4%)
+│
+│  📋 ✅ LOW RISK — Distribusi holder terlihat normal.
+└──────────────────────────────────────────────────────────────────────────────┘
+
+📊 Risk Distribution: 🔴 0 Critical | 🟠 2 High | 🟡 11 Medium | 🟢 7 Low
+
+════════════════════════════════════════════════════════════════════════════════
+  TOP RISK HOLDERS (Score ≥ 35)
+════════════════════════════════════════════════════════════════════════════════
+
+  # 1 🟠 HIGH — Score: 60/100
+  CpzdmFtDCsxHSeBLvgL8WCBwqWNs4ANoyqqj8FLWzBwy
+  152,260,042 tokens (28.68%) | Age: 1d | Tokens: 0 (0 held)
+  First Buy: 2026-02-16 03:10:21
+    → ❌ No trading history (15pts)
+    → 🐋 Whale: 28.68% of supply (20pts)
+    → 🆕 Brand new wallet: 1 day(s) old (15pts)
+    → 🔍 Whale with no trading history (10pts)
+
+  # 2 🟠 HIGH — Score: 50/100
+  DpZu4FiKeLY5zciyyBP2BNtaDqdnvvzhTt2nnCg2fQuq
+  16,530,050 tokens (3.11%) | Age: 3d | Tokens: 65 (2 held)
+    → ⚠️  Very low diversity: 2 tokens (12pts)
+    → 📈 Notable holder: 3.11% (7pts)
+    → ⚠️  Moderate coordination: J=0.01, 12 wallets (14pts)
+    → 📅 Very young wallet: 3 days old (10pts)
+    → 🤖 Bot-like activity: 130.49 tx/day (7pts)
+
+  # 3 🟡 MEDIUM — Score: 47/100
+  3oJEzUEqXq8ajvWDHAkTAcwmMBfa1WAcH9U5ZWeQo73H
+  24,958,414 tokens (4.70%) | Age: 1d | Tokens: 0 (0 held)
+  First Buy: 2026-02-16 02:55:28
+    → ❌ No trading history (15pts)
+    → 📈 Notable holder: 4.70% (7pts)
+    → 🆕 Brand new wallet: 1 day(s) old (15pts)
+    → 🔍 Whale with no trading history (10pts)
+
+  # 4 🟡 MEDIUM — Score: 46/100
+  7X2VwT26QoSjH9FZRUc9fZoow3An11jxyZf1aMNhsmC5
+  34,591,599 tokens (6.52%) | Age: 3d | Tokens: 1 (1 held)
+  First Buy: 2026-02-16 03:04:01
+    → ⚠️  Very low diversity: 1 tokens (12pts)
+    → 📊 Large holder: 6.52% (14pts)
+    → 📅 Very young wallet: 3 days old (10pts)
+    → 🔍 Whale with no trading history (10pts)
+
+  # 5 🟡 MEDIUM — Score: 43/100
+  BBPKQwYLyiPjAX2KTFxanR7vxwa7majAF7c7yoaRX8oR
+  26,197,968 tokens (4.93%) | Age: 1d | Tokens: 67 (60 held)
+    → 📈 Notable holder: 4.93% (7pts)
+    → ⚠️  Moderate coordination: J=0.01, 12 wallets (14pts)
+    → 🆕 Brand new wallet: 1 day(s) old (15pts)
+    → 🤖 Bot-like activity: 2490.27 tx/day (7pts)
+
+  # 6 🟡 MEDIUM — Score: 39/100
+  EhG1pGo2imP9Z5q3qrmXRmrbrDF24djaSHz8kKXwimvp
+  16,331,202 tokens (3.08%) | Age: 6d | Tokens: 7 (1 held)
+    → ⚠️  Very low diversity: 1 tokens (12pts)
+    → 📈 Notable holder: 3.08% (7pts)
+    → 📅 Very young wallet: 6 days old (10pts)
+    → 🔍 Whale with no trading history (10pts)
+
+────────────────────────────────────────────────────────────────────────────────
+  OTHER HOLDERS (Score < 35)
+────────────────────────────────────────────────────────────────────────────────
+  Score | %Supply | Age  | Tokens | Wallet
+  ───────────────────────────────────────────────────────────────────────────
+     34 |    2.4% | 27d  |    11 | 8vKGjHRe3pAyfXHBS3ZDX2MYo2WiqzZyFtyJFDTpCmYw
+     33 |    6.1% | 30d  |   228 | GZXa5tRnC2hHk7uEwRytMfCRazJ1yVLphYgnMbGsovDx
+     33 |    4.6% | 23d  |   121 | 9GVbk3Xe4EWEgwwJD6WMLyW4fhngHm6R7eDC2wvBdomH
+     33 |    4.3% | 24d  |   321 | EKGi6h8DMpEkfuzssz4kiUvx3mpRqTPeznbJYPmxUCWj
+     33 |    2.6% | 17d  |   139 | FM5huU4kVcYLyojyywdUnhivtkFjwuAumWehgccU95Ho
+     32 |    3.4% | 13d  |    28 | 6QQSEJraDnS9ET3PJqTmqcJH5fvejMFnJ7f3EU9Qu4sX
+     32 |    1.8% | 3d   |    11 | GQf7mAkDxacieQ2s59ACgbbvhaeF75FtYR35zFaXa4YA
+     28 |    5.8% | 152d |   275 | 7j5ooXhfyFVobxS7AbpRhZ7htYnd78tb35Mx5onjFMDG
+     21 |    4.4% | 298d |  1406 | DZWRFGfm5563GBniGAUKxmBzpHoEcr12Y1rGgzqujVFU
+     21 |    3.4% | 347d |   970 | Gwv9NGzyQvUPYk7A5mhDXHVL88P39Eoz9omQ1SVgguMv
+     21 |    1.8% | 47d  |   324 | 22qrp7nUNeKWaguF4D48Y3p8Qw1UE4Xu9CjZYPEDo5Uu
+     19 |    3.8% | 11d  |   129 | 34Kq3jEpUxjr41CCE9ot6nSgdANgvqA44hLpYwuPHTB6
+     14 |    2.6% | 33d  |    90 | 67k5d4z6asxgkXfMrhZ8cGZSUrQmm2tCjKa6akFZn5cu
+     14 |    1.9% | 86d  |   148 | F3Gj2omCESByDkw93uWctHhVbhsg8nSNHsAPmJJbXr7n
+  (Token count = total unique tokens ever traded, excl. universal)
+
+════════════════════════════════════════════════════════════════════════════════
+  Total: 530,861,124 tokens across 20 holders
+════════════════════════════════════════════════════════════════════════════════
+
+╔══════════════════════════════════════════════════════════════════════════════╗
+║  🔗 CLUSTER & PATTERN ANALYSIS                                               ║
+╚══════════════════════════════════════════════════════════════════════════════╝
+
+  🔍 TRADING SIMILARITY — 1 group(s) (Jaccard method)
+  ──────────────────────────────────────────────────────────────────────
+
+  Group #1 — 12 wallets — J=0.012 🟡 MODERATE — 46.4% supply
+    GZXa5tRnC2hHk7uEwRytMfCRazJ1yVLphYgnMbGsovDx  (6.1%)
+    7j5ooXhfyFVobxS7AbpRhZ7htYnd78tb35Mx5onjFMDG  (5.8%)
+    DZWRFGfm5563GBniGAUKxmBzpHoEcr12Y1rGgzqujVFU  (4.4%)
+    FM5huU4kVcYLyojyywdUnhivtkFjwuAumWehgccU95Ho  (2.6%)
+    F3Gj2omCESByDkw93uWctHhVbhsg8nSNHsAPmJJbXr7n  (1.9%)
+    9GVbk3Xe4EWEgwwJD6WMLyW4fhngHm6R7eDC2wvBdomH  (4.6%)
+    EKGi6h8DMpEkfuzssz4kiUvx3mpRqTPeznbJYPmxUCWj  (4.3%)
+    Gwv9NGzyQvUPYk7A5mhDXHVL88P39Eoz9omQ1SVgguMv  (3.4%)
+    DpZu4FiKeLY5zciyyBP2BNtaDqdnvvzhTt2nnCg2fQuq  (3.1%)
+    22qrp7nUNeKWaguF4D48Y3p8Qw1UE4Xu9CjZYPEDo5Uu  (1.8%)
+    6QQSEJraDnS9ET3PJqTmqcJH5fvejMFnJ7f3EU9Qu4sX  (3.4%)
+    BBPKQwYLyiPjAX2KTFxanR7vxwa7majAF7c7yoaRX8oR  (4.9%)
+
+╔══════════════════════════════════════════════════════════════════════════════╗
+║  🕵️  SUSPECTED INSIDER / TEAM GROUPS                                         ║
+╚══════════════════════════════════════════════════════════════════════════════╝
+
+  📊 1 grup terdeteksi — 12 wallets — 46.4% supply
+
+  ┌────────────────────────────────────────────────────────────────────────────┐
+  │ GRUP #1 — ⚪ KONEKSI LEMAH
+  │ Confidence: 5/100 | 12 wallets | 46.4% supply
+  ├────────────────────────────────────────────────────────────────────────────┤
+  │ BUKTI:
+  │   👥 Grup besar: 12 wallet — 5pts
+  │
+  │ ANGGOTA:
+  │   GZXa5tRnC2hHk7uEwRytMfCRazJ1yVLphYgnMbGsovDx  6.1% | Age:30d | Tok:10 | Risk:33
+  │   7j5ooXhfyFVobxS7AbpRhZ7htYnd78tb35Mx5onjFMDG  5.8% | Age:152d | Tok:66 | Risk:28
+  │   DZWRFGfm5563GBniGAUKxmBzpHoEcr12Y1rGgzqujVFU  4.4% | Age:298d | Tok:112 | Risk:21
+  │   FM5huU4kVcYLyojyywdUnhivtkFjwuAumWehgccU95Ho  2.6% | Age:17d | Tok:6 | Risk:33
+  │   F3Gj2omCESByDkw93uWctHhVbhsg8nSNHsAPmJJbXr7n  1.9% | Age:86d | Tok:58 | Risk:14
+  │   9GVbk3Xe4EWEgwwJD6WMLyW4fhngHm6R7eDC2wvBdomH  4.6% | Age:23d | Tok:119 | Risk:33
+  │   EKGi6h8DMpEkfuzssz4kiUvx3mpRqTPeznbJYPmxUCWj  4.3% | Age:24d | Tok:10 | Risk:33
+  │   Gwv9NGzyQvUPYk7A5mhDXHVL88P39Eoz9omQ1SVgguMv  3.4% | Age:347d | Tok:659 | Risk:21
+  │   DpZu4FiKeLY5zciyyBP2BNtaDqdnvvzhTt2nnCg2fQuq  3.1% | Age:3d | Tok:2 | Risk:50
+  │   22qrp7nUNeKWaguF4D48Y3p8Qw1UE4Xu9CjZYPEDo5Uu  1.8% | Age:47d | Tok:11 | Risk:21
+  │   6QQSEJraDnS9ET3PJqTmqcJH5fvejMFnJ7f3EU9Qu4sX  3.4% | Age:13d | Tok:3 | Risk:32
+  │   BBPKQwYLyiPjAX2KTFxanR7vxwa7majAF7c7yoaRX8oR  4.9% | Age:1d | Tok:60 | Risk:43
+  └────────────────────────────────────────────────────────────────────────────┘
+
+╔══════════════════════════════════════════════════════════════════════════════╗
+║  💰 FUNDING CHAIN ANALYSIS                                                   ║
+╚══════════════════════════════════════════════════════════════════════════════╝
+  Traced: 16/20 | Unknown origin: 4 | From known entity: 1
+
+  FUNDING ORIGINS:
+  ───────────────────────────────────────────────────────────────────────────
+  CpzdmFtDCsxHSeBLvgL8WCBwqWNs4ANoyqqj8FLWzBwy
+    ← Unknown
+  7X2VwT26QoSjH9FZRUc9fZoow3An11jxyZf1aMNhsmC5
+    ← F7p3dFrjRTbtRp8FRF6qHLomXbKRBzpvBLjtQcfcgmNe  [02-13 13:19:06 | 32.8599 SOL]
+  GZXa5tRnC2hHk7uEwRytMfCRazJ1yVLphYgnMbGsovDx
+    ← F59XoKWChoLfFCVQdhqVPLFsAg5hSMhPXZ261DayxLxG  [02-15 22:11:30 | 0.0000 SOL]
+  7j5ooXhfyFVobxS7AbpRhZ7htYnd78tb35Mx5onjFMDG
+    ← po27vzv7pSZYsroDopmGVVBVAqxg4GcyZXxmCkoejFB 🏦 🤖 Sniper MEV Bot  [02-15 16:53:03 | 0.0000 SOL]
+  BBPKQwYLyiPjAX2KTFxanR7vxwa7majAF7c7yoaRX8oR
+    ← 9ehRvSHuQuVhbYkg1uKU7RaLrQ6awPTLbQpPCLj3Y1Bh  [02-16 03:10:07 | 4.4697 SOL]
+  3oJEzUEqXq8ajvWDHAkTAcwmMBfa1WAcH9U5ZWeQo73H
+    ← E9vf42zJXFv8Ljop1cG68NAxLDat4ZEGEWDLfJVX38GF  [02-15 18:35:40 | 33.1638 SOL]
+  9GVbk3Xe4EWEgwwJD6WMLyW4fhngHm6R7eDC2wvBdomH
+    ← B8C7Siqq99Z8oCdPB1HNDuWH46HwysFEE2pSnybBK6o8  [02-14 19:55:51 | 1.8997 SOL]
+  DZWRFGfm5563GBniGAUKxmBzpHoEcr12Y1rGgzqujVFU
+    ← GaxwGmSfaZHWyFQKXpWKAY1M41vfjrg9veP356nCfgKM  [02-15 16:07:39 | 1.7926 SOL]
+  EKGi6h8DMpEkfuzssz4kiUvx3mpRqTPeznbJYPmxUCWj
+    ← Unknown
+  34Kq3jEpUxjr41CCE9ot6nSgdANgvqA44hLpYwuPHTB6
+    ← DGxeHM5s4VsSyqekCcN6A3NCrPNV9N4VMXeHBsmA1vcF  [02-16 02:41:37 | 3.2847 SOL]
+      ← 34Kq3jEpUxjr41CCE9ot6nSgdANgvqA44hLpYwuPHTB6
+  Gwv9NGzyQvUPYk7A5mhDXHVL88P39Eoz9omQ1SVgguMv
+    ← W1dpE4gjhiYCyU9F92EHJDYNpaKHrMcqYeMo7kDarg4  [02-15 12:09:04 | 0.0000 SOL]
+  6QQSEJraDnS9ET3PJqTmqcJH5fvejMFnJ7f3EU9Qu4sX
+    ← Bn4afuhPFtyQStUXcCQC71vGABMYaVSmTwVumSV9xXtq  [02-15 04:55:28 | 0.0000 SOL]
+  DpZu4FiKeLY5zciyyBP2BNtaDqdnvvzhTt2nnCg2fQuq
+    ← 5zsj6PENtnLXNtxBUUVwC23x34RXHzk8zG1S4fZ2JEHy  [02-16 01:35:47 | 0.0000 SOL]
+  EhG1pGo2imP9Z5q3qrmXRmrbrDF24djaSHz8kKXwimvp
+    ← DRBHGmQGarKWuCprBuko5dtEdmB2TPKCAEfKmcwQaJBs  [02-13 21:55:43 | 0.0000 SOL]
+  FM5huU4kVcYLyojyywdUnhivtkFjwuAumWehgccU95Ho
+    ← Unknown
+  67k5d4z6asxgkXfMrhZ8cGZSUrQmm2tCjKa6akFZn5cu
+    ← 7byVMpwLZZR6jSYHkNHXifDb72DAvwRbQjxEzRgUqN9D  [02-15 19:00:04 | 0.3864 SOL]
+  8vKGjHRe3pAyfXHBS3ZDX2MYo2WiqzZyFtyJFDTpCmYw
+    ← Unknown
+  F3Gj2omCESByDkw93uWctHhVbhsg8nSNHsAPmJJbXr7n
+    ← 4hzLjjsqMHfmoVrvop7FKm1HLeFP4DK2uxPLMEVcMf6q  [02-14 17:31:57 | 13.9345 SOL]
+  GQf7mAkDxacieQ2s59ACgbbvhaeF75FtYR35zFaXa4YA
+    ← HJHQWRhrrbyrLa1F77ApsvxE6U2dxFiDxYKZDtMSuxGW  [02-16 02:47:55 | 2.7733 SOL]
+  22qrp7nUNeKWaguF4D48Y3p8Qw1UE4Xu9CjZYPEDo5Uu
+    ← B9H6aZwvgHQvqmdC6Wm1cvTbsmPB6BvYiHPoszuDHwMq  [02-16 02:36:57 | 10.0949 SOL]
+
+================================================================================
